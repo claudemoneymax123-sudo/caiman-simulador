@@ -1,0 +1,168 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- Simulador del Caimán 1. Diseño de un solo tema (oscuro, tipo consola de control). -->
+<title>Simulador Caimán 1</title>
+<style>
+  :root {
+    --bg: #101317; --panel: #191d23; --panel-2: #21262d; --line: #2f353e;
+    --text: #e7e9ec; --muted: #8e959f; --accent: #58c4ff;
+    --verde: #2ecc71; --amarillo: #f5c400; --naranja: #ff7a1a; --rojo: #ff3b3b; --azul: #3d8bff; --morado: #c04dff;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .app { display: grid; grid-template-columns: 1fr 400px; height: 100%; }
+  .vista { position: relative; overflow: hidden; min-height: 320px; }
+  .vista canvas { display: block; }
+  #etiquetas { position: absolute; inset: 0; pointer-events: none; }
+  .etiqueta3d { font: 11px/1.2 var(--mono); color: #fff; background: rgba(10, 12, 15, .78); border: 1px solid rgba(255,255,255,.15); padding: 2px 6px; border-radius: 4px; white-space: nowrap; transform: translateY(-8px); }
+  .etiqueta3d.ojo { border-left: 4px solid var(--c, var(--verde)); }
+  .banner { position: absolute; top: 12px; left: 12px; right: 12px; display: flex; gap: 10px; align-items: stretch; flex-wrap: wrap; pointer-events: none; }
+  .alerta { font: 700 16px var(--mono); padding: 8px 14px; border-radius: 8px; color: #111; background: var(--verde); letter-spacing: .03em; box-shadow: 0 4px 20px rgba(0,0,0,.35); }
+  .alerta small { display: block; font: 500 11px var(--mono); opacity: .8; letter-spacing: 0; }
+  .modo, .reloj { font: 600 13px var(--mono); padding: 8px 12px; border-radius: 8px; background: rgba(25,29,35,.88); border: 1px solid var(--line); }
+  .reloj b { font-size: 16px; }
+  .pista { position: absolute; bottom: 10px; left: 12px; color: var(--muted); font-size: 12px; background: rgba(16,19,23,.7); padding: 4px 8px; border-radius: 4px; }
+  .capa { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(40,0,0,.55); }
+  .capa.ver { display: flex; }
+  .capa .caja { max-width: 470px; background: var(--panel); border: 1px solid var(--rojo); border-radius: 10px; padding: 18px 20px; }
+  .capa h3 { margin: 0 0 6px; color: var(--rojo); }
+
+  aside { background: var(--panel); border-left: 1px solid var(--line); overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+  h1 { font-size: 16px; margin: 0; } h1 small { color: var(--muted); font-weight: 400; display: block; font-size: 12px; margin-top: 3px; }
+  h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 8px; font-weight: 600; }
+  section { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .kv { display: flex; flex-direction: column; min-width: 0; } .kv span { color: var(--muted); font-size: 11px; } .kv b { font: 600 14px var(--mono); }
+  .barra { height: 5px; background: #0f1114; border-radius: 3px; overflow: hidden; margin-top: 3px; } .barra i { display: block; height: 100%; background: var(--accent); width: 0; }
+  canvas#grafica { width: 100%; height: 170px; display: block; background: #0f1114; border-radius: 6px; }
+  .leyenda { display: flex; gap: 10px; font-size: 11px; color: var(--muted); margin-top: 6px; flex-wrap: wrap; }
+  .leyenda i { display: inline-block; width: 10px; height: 3px; margin-right: 4px; vertical-align: middle; }
+  .ojos-lista div { display: grid; grid-template-columns: 12px 1fr auto; gap: 8px; align-items: center; padding: 3px 0; border-bottom: 1px solid var(--line); font-size: 12px; }
+  .ojos-lista div:last-child { border: none; }
+  .punto { width: 10px; height: 10px; border-radius: 50%; background: var(--verde); }
+  .ojos-lista em { color: var(--muted); font-style: normal; font: 11px var(--mono); }
+  label.fila { display: grid; grid-template-columns: 130px 1fr 56px; align-items: center; gap: 8px; margin: 6px 0; }
+  label.fila output { font: 12px var(--mono); text-align: right; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  select, button { font: inherit; color: var(--text); background: #2c3138; border: 1px solid #3b414a; border-radius: 6px; padding: 5px 9px; }
+  button { cursor: pointer; } button:hover { background: #353b43; } button.on { background: #1e4f6e; border-color: var(--accent); }
+  .botones { display: flex; flex-wrap: wrap; gap: 6px; }
+  #consola { font: 11.5px/1.45 var(--mono); height: 160px; overflow-y: auto; background: #0f1114; border-radius: 6px; padding: 6px 8px; white-space: pre-wrap; }
+  #consola .aviso { color: var(--amarillo); } #consola .error { color: var(--rojo); }
+  table { width: 100%; border-collapse: collapse; font: 11.5px var(--mono); } td { padding: 2px 0; border-bottom: 1px solid var(--line); } td:last-child { color: var(--muted); text-align: right; }
+  .nota { color: var(--muted); font-size: 11.5px; margin: 6px 0 0; }
+
+  @media (max-width: 900px) {
+    body { padding-inline: 16px; }
+    .app { grid-template-columns: 1fr; height: auto; }
+    .vista { height: 60vh; }
+    aside { border-left: none; border-top: 1px solid var(--line); padding: 12px 16px; }
+    label.fila { grid-template-columns: 110px 1fr 50px; }
+  }
+</style>
+<script type="importmap">
+  { "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  } }
+</script>
+<div class="app">
+  <div class="vista" id="vista">
+    <div id="etiquetas"></div>
+    <div class="banner">
+      <div class="alerta" id="alerta">VERDE<small id="motivo">normal</small></div>
+      <div class="modo" id="modo">Estación: arrancando…</div>
+      <div class="reloj">Aguacero <b id="reloj">00:00</b> / 30:00</div>
+    </div>
+    <div class="pista">Arrastre para girar · rueda para acercar · vista a escala real; la electrónica es la de la maqueta 1:5</div>
+    <div class="capa" id="caida">
+      <div class="caja">
+        <h3>Caída de tensión: el Arduino se reinició</h3>
+        <p>El motor de la banda y el servo pidieron más corriente de la que da el pin de 5 V del Arduino. La placa se reinició y Johnny-Five perdió la conexión Firmata: la rampa quedó floja y cayó por su peso.</p>
+        <p>En la maqueta real, alimente el servo (6 V) y el motor (12 V) con fuentes propias y una todas las tierras (GND).</p>
+        <button id="caidaArreglar">Pasar a fuentes externas y reiniciar la placa</button>
+      </div>
+    </div>
+  </div>
+
+  <aside>
+    <h1>Proyecto CAIMÁN · Caimán 1 a escala 1:5<small>Salida del arroyo Rebolo al Caño de la Auyama. Corre el mismo <code>src/estacion.js</code> que la maqueta con Arduino.</small></h1>
+
+    <section>
+      <h2>Aguacero de demostración (30 min)</h2>
+      <div class="botones">
+        <button id="play">⏸ Pausar</button>
+        <select id="velocidad" aria-label="Velocidad"><option value="1">×1 tiempo real</option><option value="10">×10</option><option value="20" selected>×20 (feria: 90 s)</option><option value="60">×60</option></select>
+        <button id="reiniciar">↺ Reiniciar</button>
+        <button id="sonido">🔇 Sonido</button>
+      </div>
+      <p class="nota">Modelo hidrológico simplificado y sin calibrar. Los umbrales de alerta son provisionales hasta tener datos de la Fase 1.</p>
+    </section>
+
+    <section>
+      <h2>Telemetría de la estación</h2>
+      <div class="grid">
+        <div class="kv"><span>Lluvia ahora</span><b id="tLluvia">–</b></div>
+        <div class="kv"><span>Nivel en el caimán</span><b id="tNivel">–</b></div>
+        <div class="kv"><span>Corriente del río</span><b id="tFlujo">–</b></div>
+        <div class="kv"><span>Compuerta (servo)</span><b id="tComp">–</b></div>
+        <div class="kv"><span>Banda (PWM)</span><b id="tBanda">–</b></div>
+        <div class="kv"><span>Motor</span><b id="tRpm">–</b></div>
+        <div class="kv"><span>Objetos atrapados</span><b id="tObj">0</b></div>
+        <div class="kv"><span>Kilos (estimado)</span><b id="tKg">0</b></div>
+        <div class="kv"><span>Escaparon</span><b id="tEsc">0</b></div>
+        <div class="kv" style="grid-column: span 3"><span>Corriente de servo + motor</span><b id="tAmp">–</b><div class="barra"><i id="ampBarra"></i></div></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Ojos (sensores aguas arriba)</h2>
+      <div class="ojos-lista" id="ojosLista"></div>
+    </section>
+
+    <section>
+      <h2>Nivel y lluvia · 60 min</h2>
+      <canvas id="grafica" width="740" height="340"></canvas>
+      <div class="leyenda">
+        <span><i style="background:#9fd3ff"></i>ojos 1→5</span>
+        <span><i style="background:#ff3b3b"></i>cota ojo 5</span>
+        <span><i style="background:#5b7fa6"></i>lluvia</span>
+        <span>franja = alerta</span>
+      </div>
+    </section>
+
+    <section>
+      <h2>Hardware de la maqueta</h2>
+      <label class="fila">Voltaje del servo <select id="voltaje"><option value="6">6,0 V</option><option value="4.8">4,8 V</option></select><output></output></label>
+      <label class="fila">Alimentación <select id="alim"><option value="externa">Fuentes externas</option><option value="arduino5v">5 V del Arduino ✗</option></select><output></output></label>
+      <label class="fila">Masa de la rampa <input type="range" id="masa" min="100" max="3500" step="50" value="350"><output id="masaOut">350 g</output></label>
+      <div class="botones">
+        <button id="componentes">Ver componentes</button>
+        <button id="atasco">Atascar banda (llanta)</button>
+        <button id="cortar">Cortar conexión con el cerebro</button>
+        <button id="reset">Reiniciar placa</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>Consola (lo mismo que imprime la maqueta)</h2>
+      <div id="consola"></div>
+    </section>
+
+    <section>
+      <h2>Pines (Arduino Uno)</h2>
+      <table>
+        <tr><td>D9 → servo MG996R (rampa / boca)</td><td>6 V aparte</td></tr>
+        <tr><td>D3 → MOSFET → motor banda 12 V</td><td>PWM</td></tr>
+        <tr><td>D5 / D6 / D11 → MOSFET → tira RGB</td><td>PWM</td></tr>
+        <tr><td>D8 → transistor → buzzer (rugido)</td><td>digital</td></tr>
+        <tr><td>D2 ← receptor barrera IR</td><td>pull-up</td></tr>
+        <tr><td>Todas las GND unidas</td><td>obligatorio</td></tr>
+      </table>
+    </section>
+  </aside>
+</div>
+<script type="module" src="sim/main.js"></script>

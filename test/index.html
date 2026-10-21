@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pruebas CAIMÁN</title>
+<style>
+  body { font: 14px/1.5 ui-monospace, Menlo, monospace; margin: 24px; background: #111; color: #ddd; }
+  .ok { color: #5c5; } .falla { color: #f66; } pre { white-space: pre-wrap; margin: 0 0 0 2em; color: #f99; }
+</style>
+</head>
+<body>
+<h1>CAIMÁN · Caimán 1 a escala 1:5 — pruebas</h1>
+<div id="out"></div>
+<script type="module">
+  import { tests } from "./caiman.spec.js";
+  const out = document.getElementById("out");
+  let ok = 0, falla = 0;
+  for (const [nombre, fn] of tests) {
+    const row = document.createElement("div");
+    const t0 = performance.now();
+    try { fn(); ok++; row.innerHTML = `<span class="ok">✔</span> ${nombre} <small>(${(performance.now() - t0).toFixed(0)} ms)</small>`; }
+    catch (e) { falla++; row.innerHTML = `<span class="falla">✘ ${nombre}</span><pre>${e.message}</pre>`; }
+    out.append(row);
+  }
+  const sum = document.createElement("h2");
+  sum.id = "resumen";
+  sum.className = falla ? "falla" : "ok";
+  sum.textContent = `${ok} pasaron, ${falla} fallaron`;
+  out.append(sum);
+</script>
+</body>
+</html>

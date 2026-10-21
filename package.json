@@ -1,0 +1,23 @@
+{
+  "name": "caiman-escala",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Proyecto CAIMÁN: Caimán 1 a escala 1:5. Controlador Johnny-Five + simulador 3D del arroyo Rebolo",
+  "type": "module",
+  "engines": {
+    "node": ">=20.14"
+  },
+  "scripts": {
+    "maqueta": "node hardware/run.js",
+    "demo": "node hardware/run.js",
+    "demo:sin-placa": "node hardware/run.js --sin-placa --rapido 20",
+    "calibrar": "node hardware/calibrar.js",
+    "test": "node --test --test-force-exit test/run-node.js test/johnny-five-real.test.js",
+    "sim": "npx --yes http-server@14.1.1 -p 8766 -c-1 ."
+  },
+  "dependencies": {
+    "firmata-io": "^2.3.0",
+    "johnny-five": "^2.1.0",
+    "serialport": "^13.0.0"
+  }
+}
