@@ -1,5 +1,7 @@
 # Proyecto CAIMÁN · Caimán 1 a escala 1:5
 
+**Simulador en línea:** <https://claudemoneymax123-sudo.github.io/caiman-simulador/>
+
 Maqueta y simulador de **las fauces** del Caimán 1, la estación piloto en la salida del arroyo Rebolo (Carrera 21) al Caño de la Auyama. Atrapa la basura antes de que llegue al río Magdalena.
 
 La maqueta hace lo que pide la especificación de la Fase 1 para el caimán a escala:
