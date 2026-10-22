@@ -53,8 +53,12 @@ export class VirtualWorld extends Emitter {
     // Montaje físico (editable desde el simulador)
     this.voltajeServo = opts.voltajeServo ?? 6.0;          // 4.8 o 6.0
     this.alimentacion = opts.alimentacion ?? "externa";    // "externa" | "arduino5v"
-    this.rampaMasaKg = opts.rampaMasaKg ?? 0.35;           // rampa + banda + rodillos (maqueta)
-    this.rampaBrazoM = opts.rampaBrazoM ?? 0.10;           // bisagra -> centro de masa
+    this.rampaMasaKg = opts.rampaMasaKg ?? 0.35;           // rampa + banda + rodillos (maqueta, 1 m de largo)
+    this.rampaBrazoM = opts.rampaBrazoM ?? 0.45;           // bisagra -> centro de masa (casi la mitad de la rampa)
+    // Contrapeso detrás de la bisagra (kg·m). Por diseño compensa un 15 % MÁS que la
+    // rampa: sin corriente la rampa SUBE sola (falla segura = boca abierta) y el servo
+    // trabaja para cerrarla. 0 = sin contrapeso (la rampa cae cerrada sin corriente).
+    this.contrapesoKgM = opts.contrapesoKgM ?? 0.35 * 0.45 * 1.15;
     this.rampaOffsetDeg = opts.rampaOffsetDeg ?? 45;       // servo 45° = rampa horizontal
     this.cargaBanda = 0;                                   // 0..1, la pone la escena (basura / atasco)
     this.digital = new Map();                              // nivel de cada pin de entrada
@@ -78,10 +82,14 @@ export class VirtualWorld extends Emitter {
   }
 
   step(dtMs) {
-    const n = Math.max(1, Math.round(dtMs));
+    // Acumula la fracción de milisegundo para no adelantarse al reloj de la escena.
+    this._resto = (this._resto || 0) + dtMs;
+    const n = Math.floor(this._resto);
+    this._resto -= n;
     for (let i = 0; i < n; i++) {
       this.time += 1;
-      if (!this.dead) {
+      {
+        // El ciclo del controlador corre en el portátil: sigue andando aunque el Arduino se caiga.
         for (const t of this.timers) {
           if (t.alive && this.time >= t.next) {
             t.fn();
@@ -107,13 +115,14 @@ export class VirtualWorld extends Emitter {
     this._sobre = a > 0.45 ? (this._sobre || 0) + 1 : 0;
     if (this._sobre > 4) {
       this.dead = true;
+      // El Uno se reinicia: sus salidas quedan en 0 y deja de obedecer. El programa
+      // en el portátil NO se entera por sí solo (sigue mandando órdenes que nadie ejecuta).
       for (const s of this.servos) s.flojo = true;
       for (const m of this.motores) m.pwm = 0;
       for (const l of this.leds) l.rgb = [0, 0, 0];
       for (const p of this.pins) p.value = 0;
-      this.timers = [];
       this.emit("brownout", { amps: a });
-      this.board?.emit("error", new Error("Caída de tensión: el Arduino se reinició y Johnny-Five perdió la conexión Firmata"));
+      this.board?.emit("close");
     }
   }
 }
@@ -161,7 +170,13 @@ export function createVirtualFive(world) {
       world.servos.push(this);
     }
     to(deg) {
-      if (typeof deg !== "number" || Number.isNaN(deg)) throw new Error("Servo.to: degrees must be a number");
+      if (world.dead) return this;
+      if (typeof deg !== "number" || Number.isNaN(deg)) {
+        // Como johnny-five 2.1.0: NaN termina en 0 µs y Firmata lo toma como 0°.
+        world.warn(`Servo D${this.pin}: ángulo inválido (${deg}); el servo real iría a 0°`);
+        this.value = 0;
+        return this;
+      }
       this.value = Math.min(this.range[1], Math.max(this.range[0], deg));
       return this;
     }
@@ -170,9 +185,12 @@ export function createVirtualFive(world) {
       if (this._trama >= SERVO_TRAMA_MS) { this._trama -= SERVO_TRAMA_MS; this._latch = this.value; }
       const rampa = ((this.grados - world.rampaOffsetDeg) * Math.PI) / 180;
       // Par de la gravedad sobre la rampa (+ = la empuja hacia abajo / cerrar).
-      const parG = world.rampaMasaKg * G * world.rampaBrazoM * Math.cos(rampa);
-      if (this.flojo) { // sin señal: la rampa cae por su peso hasta el tope
-        this.grados = Math.max(this.range[0] - 5, this.grados - 0.08 * dtMs);
+      // Par neto de rampa y contrapeso (+ = hacia abajo / cerrar, − = hacia arriba / abrir).
+      const parG = (world.rampaMasaKg * world.rampaBrazoM - world.contrapesoKgM) * G * Math.cos(rampa);
+      if (this.flojo) { // sin señal: gana el lado más pesado y la rampa va hasta su tope
+        const vel = 0.04 * Math.min(2, Math.abs(parG) / 0.2) * dtMs; // grados por paso
+        if (parG > 0) this.grados = Math.max(this.range[0] - 2, this.grados - vel);
+        else this.grados = Math.min(this.range[1] + 2, this.grados + vel);
         this.corrienteA = 0;
         return;
       }
@@ -207,11 +225,18 @@ export function createVirtualFive(world) {
       exigirPwm(opts.pin, "Motor");
       this.pin = opts.pin;
       this.pwm = 0;
+      this.umbral = opts.threshold ?? 30;
       this.rpm = 0;
       this.corrienteA = 0;
       world.motores.push(this);
     }
-    start(speed = 128) { if (!world.dead) this.pwm = Math.min(255, Math.max(0, Math.round(speed))); return this; }
+    // johnny-five pone en 0 toda velocidad menor que su umbral (threshold = 30).
+    start(speed = 128) {
+      if (world.dead) return this;
+      const v = Math.min(255, Math.max(0, Math.round(speed)));
+      this.pwm = v < this.umbral ? 0 : v;
+      return this;
+    }
     stop() { this.pwm = 0; return this; }
     _fisica(dtMs) {
       const d = this.pwm / 255;
@@ -286,8 +311,15 @@ export function createVirtualFive(world) {
       this.isDown = false;
       if (!world.digital.has(this.pin)) world.digital.set(this.pin, this.pullup ? 1 : 0);
       world.botones.push(this);
+      // Como johnny-five: el primer reporte de Firmata ya dispara "press" si el pin
+      // arranca en el nivel de "presionado" (p. ej. el haz IR tapado al encender).
+      world.addTimer(7, () => {
+        const v = world.digital.get(this.pin);
+        if ((this.pullup ? v === 0 : v === 1) && !this.isDown) { this.isDown = true; this.emit("down"); this.emit("press"); }
+      }, true);
     }
     _entrada(v) {
+      if (world.dead) return; // el Uno reiniciado ya no reporta
       const abajo = this.pullup ? v === 0 : v === 1;
       world.addTimer(7, () => {
         const ahora = world.digital.get(this.pin);

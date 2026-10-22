@@ -1,4 +1,4 @@
-// node --test test/  (Node 18+)
+// node --test test/  (Node 20.14+)
 import { test } from "node:test";
 import { tests } from "./caiman.spec.js";
 

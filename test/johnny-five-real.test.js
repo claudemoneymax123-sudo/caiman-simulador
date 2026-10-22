@@ -16,7 +16,7 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
 // johnny-five manda el servo como ancho de pulso: 0–180° -> 600–2400 µs (pwmRange por defecto).
 const us = (grados) => Math.round(600 + (grados / 180) * 1800);
 
-test("johnny-five real + Firmata: la estación mueve los pines correctos del Uno", { timeout: 40000 }, async () => {
+test("johnny-five real + Firmata: la estación mueve los pines correctos del Uno", { timeout: 90000 }, async () => {
   const uno = new UnoFirmata();
   const io = new firmataIo.Firmata(uno);
   const board = new five.Board({ io, repl: false, debug: false, sigint: false });
@@ -24,7 +24,8 @@ test("johnny-five real + Firmata: la estación mueve los pines correctos del Uno
 
   const log = [];
   const est = crearEstacion(five, board, CONFIG, { log: (m) => log.push(m) });
-  await espera(1500);
+  // Arranca con la boca abierta y la cierra a velCierreDegS; luego arranca suave la banda.
+  await espera(((C.abiertaDeg - C.cerradaDeg) / C.velCierreDegS) * 1000 + CONFIG.banda.arranqueMs + 900);
 
   // Modos de pin que exige el hardware real
   assert.equal(uno.modo[P.compuerta], 4, "D9 debe estar en modo SERVO");
@@ -32,6 +33,12 @@ test("johnny-five real + Firmata: la estación mueve los pines correctos del Uno
   for (const p of [P.ojoRojo, P.ojoVerde, P.ojoAzul]) assert.equal(uno.modo[p], 3, `D${p} debe estar en PWM`);
   assert.equal(uno.modo[P.rugido], 1, "D8 debe estar en OUTPUT");
   assert.ok(uno.pullUp(P.contadorIR), "D2 debe ser entrada con pull-up (receptor IR de colector abierto)");
+
+  // Arranque: primer pulso = boca abierta, y el cierre va a pasos de ≤ 2° (nunca de golpe)
+  const servo = uno.historial.filter(([, tipo, pin]) => tipo === "analog" && pin === P.compuerta).map(([, , , v]) => v);
+  assert.equal(servo[0], us(C.abiertaDeg), "el servo debe arrancar abierto");
+  const saltoMax = Math.max(...servo.slice(1).map((v, i) => Math.abs(v - servo[i])));
+  assert.ok(saltoMax <= us(2) - us(0), `el servo saltó ${saltoMax} µs de una vez`);
 
   // VERDE: boca cerrada, banda a velocidad normal tras el arranque suave, ojos verdes
   assert.equal(uno.analog[P.compuerta], us(C.cerradaDeg), "servo en la posición cerrada");

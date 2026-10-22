@@ -16,9 +16,9 @@ const board = await conectarPlaca({ repl: true });
 
 board.on("ready", () => {
   const P = CONFIG.pines;
-  // Sin `range` a propósito: para calibrar se necesita todo el recorrido.
-  // Mover de a pocos grados para no forzar la rampa contra sus topes.
-  const compuerta = new five.Servo({ pin: P.compuerta, startAt: CONFIG.compuerta.cerradaDeg });
+  // Recorrido amplio pero con límites (5°–120°): un compuerta.to(0) no debe llevar la
+  // rampa contra su tope con la corriente de bloqueo. Mover de a pocos grados.
+  const compuerta = new five.Servo({ pin: P.compuerta, range: [5, 120], startAt: CONFIG.compuerta.abiertaDeg });
   const banda = new five.Motor({ pin: P.banda });
   const tira = new five.Led.RGB({ pins: { red: P.ojoRojo, green: P.ojoVerde, blue: P.ojoAzul } });
   const buzzer = new five.Pin(P.rugido);

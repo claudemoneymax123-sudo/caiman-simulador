@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Comité del Caimán 1</title>
+<style>
+  :root {
+    --bg: #101317; --panel: #191d23; --panel-2: #21262d; --line: #2f353e;
+    --text: #e7e9ec; --muted: #8e959f; --accent: #58c4ff;
+    --aplicado: #2ecc71; --parcial: #f5c400; --despues: #58c4ff; --rechazado: #ff7a7a;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 1040px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 30px; line-height: 1.2; margin: 0 0 6px; text-wrap: balance; }
+  .bajada { color: var(--muted); margin: 0 0 24px; max-width: 70ch; }
+  h2 { font-size: 20px; margin: 36px 0 10px; text-wrap: balance; }
+  h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 6px; }
+  p { max-width: 72ch; }
+  a { color: var(--accent); }
+  .cifras { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 18px 0 8px; }
+  .cifra { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .cifra b { display: block; font: 700 28px var(--mono); font-variant-numeric: tabular-nums; }
+  .cifra span { color: var(--muted); font-size: 13px; }
+  .cifra.aplicado b { color: var(--aplicado); } .cifra.parcial b { color: var(--parcial); } .cifra.despues b { color: var(--despues); } .cifra.rechazado b { color: var(--rechazado); }
+  .destacados { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .destacado { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .destacado p { margin: 4px 0 0; font-size: 14px; color: #c9cdd3; }
+  .filtros { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; align-items: center; }
+  .filtros button, .filtros select, .filtros input { font: inherit; font-size: 14px; color: var(--text); background: #2c3138; border: 1px solid #6b7380; border-radius: 6px; padding: 6px 10px; }
+  .filtros input { min-width: 0; flex: 1 1 200px; }
+  .filtros button[aria-pressed="true"] { background: #1e4f6e; border-color: var(--accent); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin: 14px 0; }
+  .panel > header { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: baseline; margin-bottom: 8px; }
+  .panel h2 { margin: 0; font-size: 18px; }
+  .panel header small { color: var(--muted); }
+  .tabla { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td.quien { color: var(--muted); font-size: 13px; min-width: 120px; }
+  .chip { display: inline-block; font: 600 12px var(--mono); padding: 2px 8px; border-radius: 999px; white-space: nowrap; color: #101317; }
+  .chip.aplicado { background: var(--aplicado); } .chip.parcial { background: var(--parcial); } .chip.despues { background: var(--despues); } .chip.rechazado { background: var(--rechazado); }
+  .tipo { font: 600 11px var(--mono); color: var(--muted); }
+  .razon { color: #c9cdd3; font-size: 13px; }
+  footer { margin-top: 40px; color: var(--muted); font-size: 13px; }
+  @media (max-width: 640px) { h1 { font-size: 24px; } td.quien { min-width: 90px; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Veredicto del comité sobre el Caimán 1</h1>
+  <p class="bajada">Cincuenta especialistas, organizados en 10 paneles de 5, revisaron el código real del simulador y de la maqueta a escala 1:5. Cada argumento tenía que citar la línea exacta del código; el juez verificó las afirmaciones contra el código antes de decidir. Abajo están todas las decisiones, con su razón.</p>
+  <p><a href="simulador.html">Abrir el simulador con los cambios aplicados</a></p>
+
+  <div class="cifras" id="cifras"></div>
+
+  <h2>Lo más importante que encontró el comité</h2>
+  <div class="destacados">
+    <div class="destacado"><h3>Seguridad</h3><p>Sin corriente, la rampa caía cerrada por su peso: lo contrario de la falla segura. Ahora un contrapeso la abre sola, y una prueba lo comprueba.</p></div>
+    <div class="destacado"><h3>Alertas</h3><p>Un ojo sin datos contaba como VERDE, y la demo nunca pasaba por AMARILLO. Ahora "sin datos" es un estado propio, la alerta baja un escalón a la vez y el aguacero pasa por las cuatro alertas.</p></div>
+    <div class="destacado"><h3>Física</h3><p>La rampa simulada atravesaba el fondo del canal y su brazo de palanca era irreal (0,10 m en una rampa de 1 m). Ahora hay una dársena bajo la estación y un brazo de 0,45 m con contrapeso.</p></div>
+    <div class="destacado"><h3>Feria</h3><p>Sin internet, el 3D no cargaba; el aguacero no volvía a empezar; el rugido duraba 35 ms a ×20. Las tres cosas quedaron resueltas.</p></div>
+    <div class="destacado"><h3>Hardware</h3><p>El README pedía una tira LED de cátodo común, que con MOSFET del lado bajo no enciende. Se corrigió a ánodo común, y se agregaron protecciones eléctricas.</p></div>
+    <div class="destacado"><h3>Fidelidad</h3><p>El hardware virtual no imitaba cuatro comportamientos de Johnny-Five (umbral del motor, barrera tapada al encender, ángulo inválido, caída de tensión). Ahora los imita, para que el simulador no esconda fallas reales.</p></div>
+  </div>
+
+  <h2>Todas las decisiones</h2>
+  <div class="filtros" role="group" aria-label="Filtrar decisiones">
+    <button type="button" data-f="todas" aria-pressed="true">Todas</button>
+    <button type="button" data-f="aplicado" aria-pressed="false">Aplicadas</button>
+    <button type="button" data-f="parcial" aria-pressed="false">En parte</button>
+    <button type="button" data-f="despues" aria-pressed="false">Para la Fase 1</button>
+    <button type="button" data-f="rechazado" aria-pressed="false">Rechazadas</button>
+    <label class="sr-only" for="buscar">Buscar</label>
+    <input id="buscar" type="search" placeholder="Buscar (por ejemplo: rampa, ojo, contraste)">
+  </div>
+  <div id="paneles"></div>
+
+  <footer>
+    <p>Cómo se decidió: se aprobó lo que tenía evidencia en el código, alto impacto y no rompía la regla central del proyecto (el mismo <code>src/estacion.js</code> corre en la maqueta y en el simulador). Lo que necesita datos de campo de la Fase 1 quedó "para la Fase 1". Se rechazó lo que contradecía la especificación del proyecto, inventaba valores sin medir o no tenía efecto medible. Ningún umbral de alerta se fijó como definitivo.</p>
+    <p>Pruebas al cierre del veredicto: 33 en Node (incluida una con el Johnny-Five real contra un Arduino Uno emulado byte a byte) y 32 en el navegador, todas aprobadas.</p>
+  </footer>
+</main>
+
+<script>
+const PANELES = [
+  "Hidrología y modelo del aguacero", "Cerebro, alertas y gestión del riesgo", "Controlador de la estación",
+  "Electrónica y Arduino", "Mecánica e hidráulica", "Física del simulador", "Gráficos 3D y rendimiento",
+  "Interfaz y accesibilidad", "Educación, feria y comunicación", "Software y despliegue",
+];
+// [panel (1–10), especialista, tipo, argumento, decisión, razón]
+const D = [
+  [1, "Hidróloga urbana", "EMPEORA", "La demo nunca muestra AMARILLO: salta de VERDE a NARANJA.", "aplicado", "Retención inicial de 5 mm y 2 min más de retardo. Nueva prueba exige VERDE → AMARILLO → NARANJA → ROJO → … → VERDE."],
+  [1, "Hidróloga urbana", "EMPEORA", "El Caño de la Auyama sube y baja junto con el arroyo.", "aplicado", "El caño tiene su propio nivel, controlado por el Magdalena (supuesto: sube como mucho 20 cm)."],
+  [1, "Hidróloga urbana", "EMPEORA", "El ROJO ocurre con el canal medio vacío y no se ve en la escena.", "parcial", "Se pintó la marca del nivel de peligro (provisional) en los muros. No se cambió la geometría del canal."],
+  [1, "Modelador hidrológico", "EMPEORA", "El nivel se toma como almacenamiento, sin curva de gasto.", "despues", "Correcto, pero calibrar la curva necesita datos de los ojos de la Fase 1."],
+  [1, "Modelador hidrológico", "MEJORA", "Tránsito con Muskingum entre ojos.", "despues", "El propio panel lo dejó para después de la Fase 1."],
+  [1, "Modelador hidrológico", "MEJORA", "Selector de aguaceros moderado / fuerte / extremo.", "despues", "Útil para enseñar; queda para la siguiente versión."],
+  [1, "Meteorólogo", "MEJORA", "Documentar qué periodo de retorno representa el aguacero.", "aplicado", "Comentario en el código y README: \"por verificar con las curvas IDF del IDEAM\". Sin cifras inventadas."],
+  [1, "Meteorólogo", "EMPEORA", "Ruido de lluvia segundo a segundo, sin sentido físico.", "aplicado", "Ruido por bloques de 60 s, la resolución de un pluviómetro de balancín."],
+  [1, "Meteorólogo", "MEJORA", "Desfase de la celda de tormenta entre ojos.", "rechazado", "Impacto bajo frente a lo demás."],
+  [1, "Ingeniero de canales", "EMPEORA", "La velocidad del agua sale de una recta inventada.", "aplicado", "Ecuación de Manning para el canal trapezoidal (n = 0,015; pendiente 0,002 marcada como supuesto)."],
+  [1, "Ingeniero de canales", "EMPEORA", "La fórmula de velocidad está copiada en tres sitios.", "aplicado", "Una sola función, velocidadFlujo(), en src/aguacero.js."],
+  [1, "Ingeniero de canales", "MEJORA", "Mostrar el número de Froude.", "despues", "Dato de diseño de la estación real, no de la maqueta."],
+  [1, "Ingeniero de canales", "EMPEORA", "La basura flota más lenta que el agua.", "aplicado", "Factor 1,05–1,15 sobre la velocidad media."],
+  [1, "Estadística", "MEJORA", "Procedimiento para calibrar los embalses con datos reales.", "despues", "Se hará con los datos de la Fase 1."],
+  [1, "Estadística", "EMPEORA", "El primer lavado no se puede calibrar.", "despues", "Modelo tipo SWMM cuando la barrera IR de la Fase 1 dé datos."],
+  [1, "Estadística", "MEJORA", "Botón \"otra lluvia\" con banda de incertidumbre.", "despues", "Buena idea educativa; siguiente versión."],
+
+  [2, "Gestión del riesgo", "EMPEORA", "Un ojo sin lecturas cuenta como VERDE, y una prueba lo fijaba.", "aplicado", "Ahora es \"sin datos\". La prueba cambió para exigirlo."],
+  [2, "Gestión del riesgo", "EMPEORA", "Si caen los ojos pero no el servidor, la estación recibe un VERDE \"fresco\".", "aplicado", "run.js descarta respuestas con sinDatos, ojosVivos = 0 o una hora de más de 30 s."],
+  [2, "Gestión del riesgo", "MEJORA", "Avisar que la demo no es una alerta oficial.", "aplicado", "Aviso en la tarjeta inicial y en el panel: las alertas oficiales las emite la Alcaldía."],
+  [2, "Alerta temprana", "EMPEORA", "Las lecturas viejas no caducan: un ROJO de hace 10 h seguía en ROJO.", "aplicado", "Un ojo sin lecturas en 3 min queda \"sin datos\" (parámetro provisional)."],
+  [2, "Alerta temprana", "EMPEORA", "El envío rápido del ojo (15 cm en 2 min) arranca tarde respecto a NARANJA.", "rechazado", "Ese valor viene de la especificación del firmware del proyecto. Se deja documentado."],
+  [2, "Alerta temprana", "MEJORA", "Descartar lecturas NaN o nulas.", "aplicado", "Se descartan y se cuentan como fallas del ojo."],
+  [2, "Alerta temprana", "MEJORA", "Poder apagar un ojo en la demo.", "aplicado", "Botón \"Apagar\" por ojo en el simulador."],
+  [2, "Diseñador de umbrales", "EMPEORA", "La alerta baja de ROJO a VERDE de un salto.", "aplicado", "Baja un escalón cada 5 min. La boca se cierra al mismo tiempo que antes."],
+  [2, "Diseñador de umbrales", "EMPEORA", "El color de un ojo parpadea en la cota (61 cambios en 30 min).", "aplicado", "Cada ojo usa la misma retención. Prueba: como mucho 1 cambio."],
+  [2, "Diseñador de umbrales", "MEJORA", "Devolver todos los motivos, no solo el principal.", "rechazado", "Impacto bajo; el motivo principal basta para el público."],
+  [2, "Analista de falsas alarmas", "EMPEORA", "Un ojo sin datos debería subir la alerta a AMARILLO.", "rechazado", "Es una decisión de política pública, no técnica. Se muestra \"sin datos\" sin cambiar el color público."],
+  [2, "Analista de falsas alarmas", "EMPEORA", "El mismo rugido suena por basura y por peligro.", "parcial", "Opción rugidoPorKilo en la configuración (activa en la maqueta de feria, apagable en campo)."],
+  [2, "Analista de falsas alarmas", "EMPEORA", "No suena nada al abrir por falla segura.", "aplicado", "Rugido largo al entrar en \"sin datos: boca abierta\". El recordatorio periódico en ROJO se rechazó por fatiga de alarma."],
+  [2, "Analista de falsas alarmas", "MEJORA", "Arrancar en SIN_DATOS tras un reinicio.", "parcial", "En su lugar: la boca arranca abierta y la primera consulta al servidor es inmediata."],
+  [2, "Comunicadora de riesgo", "EMPEORA", "En falla segura los ojos alternan azul con verde.", "aplicado", "Con la boca abierta por seguridad, los ojos son solo azules."],
+  [2, "Comunicadora de riesgo", "MEJORA", "Decir qué hacer en cada alerta.", "aplicado", "Consejo en el banner (provisional, a redactar con Gestión del Riesgo)."],
+  [2, "Comunicadora de riesgo", "EMPEORA", "Con la conexión cortada, el banner seguía mostrando la alerta del cerebro.", "aplicado", "Muestra \"ESTACIÓN SIN DATOS\" en azul y, debajo, lo que dice el cerebro."],
+  [2, "Debate", "—", "¿Debe un ROJO del ojo 4 abrir la boca antes de que el agua llegue al caimán?", "rechazado", "Sin cambio: es una decisión de diseño para la autoridad. Hoy anticipa la creciente."],
+
+  [3, "Control embebido", "EMPEORA", "Al encender, la rampa cae de golpe de 80° a 20°.", "aplicado", "Arranca abierta y cierra a 30°/s. Probado con el Johnny-Five real: pasos de ≤ 2°."],
+  [3, "Control embebido", "MEJORA", "Medir el dt real del ciclo.", "rechazado", "Si el ciclo se atrasa, todo va más lento: falla hacia el lado seguro."],
+  [3, "Máquinas de estado", "EMPEORA", "Sin datos del cerebro, un atasco no se detecta y la banda empuja 2 min.", "aplicado", "El atasco se detecta también en SIN_DATOS. Prueba nueva."],
+  [3, "Máquinas de estado", "EMPEORA", "Tras un ROJO con el haz tapado: atasco inmediato e \"intento 4/3\".", "aplicado", "Al salir de alivio se reinicia la cuenta del haz y de intentos. Prueba nueva."],
+  [3, "Máquinas de estado", "EMPEORA", "Un ROJO vencido no avisa a nadie.", "parcial", "Aviso en la consola y en status(); no en los ojos (el debate lo prefirió así)."],
+  [3, "Máquinas de estado", "MEJORA", "El atasco definitivo no suena.", "aplicado", "Rugido de atasco y campo atascoDefinitivo."],
+  [3, "Seguridad funcional", "EMPEORA", "Si el proceso muere, la banda sigue y la boca queda cerrada.", "parcial", "SIGTERM y errores abren la boca; perder el USB da un aviso claro. El watchdog de hardware queda para la Fase 1."],
+  [3, "Seguridad funcional", "EMPEORA", "Sin corriente, la compuerta de alivio se cierra.", "aplicado", "Contrapeso que la abre sola. Prueba: \"sin corriente, el contrapeso abre la rampa\"."],
+  [3, "Casos borde", "EMPEORA", "El antirrebote encadenado cuenta 10 objetos seguidos como 1.", "rechazado", "El panel 4 defendió lo contrario: con una sola barrera, objetos pegados son indistinguibles, y la vibración continua la cubre el atasco. Se documentó el porqué."],
+  [3, "Casos borde", "EMPEORA", "Si el servidor manda \"rojo\" en minúsculas, se ignora 2 min.", "aplicado", "Se normaliza y se avisa una sola vez. Prueba nueva."],
+  [3, "Casos borde", "EMPEORA", "El simulador no detecta la barrera tapada al encender; la maqueta sí.", "aplicado", "La placa virtual imita a Johnny-Five. Prueba nueva."],
+  [3, "Casos borde", "EMPEORA", "El rugido de un kilo corta el rugido largo de ROJO.", "aplicado", "Prioridades de rugido. Prueba nueva."],
+  [3, "Ingeniero de pruebas", "MEJORA", "Faltan pruebas de los caminos difíciles.", "aplicado", "12 pruebas nuevas (32 en total sobre hardware virtual)."],
+  [3, "Ingeniero de pruebas", "EMPEORA", "Tiempos fijos en las pruebas y pines por índice.", "aplicado", "Se derivan de la configuración; el pin se busca por número."],
+  [3, "Ingeniero de pruebas", "EMPEORA", "La prueba con Johnny-Five real puede fallar en una máquina lenta.", "aplicado", "Tiempo límite de 90 s."],
+
+  [4, "Electrónica de potencia", "EMPEORA", "Sin corriente, la rampa se cierra (falla insegura).", "aplicado", "Contrapeso (ver panel 3)."],
+  [4, "Electrónica de potencia", "EMPEORA", "Las compuertas de los MOSFET flotan durante el reinicio del Uno.", "aplicado", "README: 10 kΩ a GND y 100–220 Ω en serie en cada compuerta."],
+  [4, "Electrónica de potencia", "EMPEORA", "Diodo 1N4007 lento en el motor.", "aplicado", "README: Schottky 1N5819 o SS34 y 100 nF."],
+  [4, "Electrónica de potencia", "MEJORA", "Modelar el riel de 12 V en el simulador.", "despues", "Siguiente versión del hardware virtual."],
+  [4, "Firmata y johnny-five", "EMPEORA", "El motor virtual no aplica el umbral de 30 de Johnny-Five.", "aplicado", "Umbral imitado. Prueba nueva."],
+  [4, "Firmata y johnny-five", "EMPEORA", "Si se cae el USB, StandardFirmata deja la banda girando.", "despues", "Latido + monoestable recomendado en el README para la Fase 1."],
+  [4, "Firmata y johnny-five", "MEJORA", "Fijar explícitamente el ancho de pulso del servo.", "rechazado", "La calibración en grados ya es coherente; cambiar el mapa invalidaría las calibraciones hechas."],
+  [4, "Servos y motores", "EMPEORA", "La calibración no tenía límites (un to(0) bloquea el servo).", "aplicado", "Rango de 5° a 120° en la herramienta de calibración."],
+  [4, "Servos y motores", "MEJORA", "Buck de 6 V y condensador de 1000 µF junto al servo.", "aplicado", "Agregado a la lista de materiales."],
+  [4, "Servos y motores", "MEJORA", "Mostrar el porcentaje de par usado.", "despues", "Siguiente versión de la interfaz."],
+  [4, "Servos y motores", "EMPEORA", "El motor no tiene zona muerta a PWM bajo.", "rechazado", "Sin medición; no se inventa física (el panel 6 coincidió)."],
+  [4, "Sensores", "EMPEORA", "Una barrera IR simple se satura con el sol o las lámparas.", "aplicado", "README: receptor modulado tipo TSOP4038 a 38 kHz y visera."],
+  [4, "Sensores", "EMPEORA", "Las botellas PET transparentes pueden no cortar el haz.", "despues", "Probar en banco con botellas reales."],
+  [4, "Sensores", "EMPEORA", "Una bolsa larga podría dar un falso atasco.", "despues", "Atasco por distancia recorrida en vez de tiempo; siguiente versión."],
+  [4, "Sensores", "MEJORA", "Pesar con celda de carga en vez de estimar.", "despues", "Celda + amplificador analógico en A0, compatible con StandardFirmata."],
+  [4, "Montaje y EMC", "EMPEORA", "El README pedía tira LED de cátodo común: con MOSFET del lado bajo no enciende.", "aplicado", "Corregido a ánodo común."],
+  [4, "Montaje y EMC", "EMPEORA", "Ruido del motor en la señal del servo y la barrera.", "aplicado", "README: cables trenzados, ferrita, tierra en estrella, pull-up externo de 4,7 kΩ."],
+  [4, "Montaje y EMC", "MEJORA", "Caja IP54, conectores polarizados, fusible.", "aplicado", "Agregado al README."],
+  [4, "Montaje y EMC", "MEJORA", "Simular la pérdida del USB con la placa alimentada.", "despues", "Siguiente versión."],
+
+  [5, "Mecánica de compuertas", "EMPEORA", "Brazo de palanca de 0,10 m en una rampa de 1 m: el servo real no la levantaría.", "aplicado", "Brazo de 0,45 m con contrapeso de 0,18 kg·m."],
+  [5, "Mecánica de compuertas", "EMPEORA", "Sin inercia de la rampa en el modelo.", "despues", "Siguiente versión del modelo del servo."],
+  [5, "Mecánica de compuertas", "MEJORA", "Limitar la apertura a 90°/s.", "rechazado", "Abrir rápido es la prioridad en una creciente. Se revisa con la mecánica real."],
+  [5, "Hidráulica", "EMPEORA", "La rampa atravesaba el fondo de concreto y el casco quedaba varado.", "aplicado", "Dársena de 1,7 m bajo la estación (supuesto de diseño)."],
+  [5, "Hidráulica", "EMPEORA", "No hay par del agua sobre la rampa.", "despues", "Requiere medir en canal de pruebas."],
+  [5, "Hidráulica", "EMPEORA", "Flotación rígida: la panza llena no cambia el calado.", "despues", "Siguiente versión."],
+  [5, "Captura tipo Interceptor", "EMPEORA", "Captura del 100 %: nunca escapa nada con la boca cerrada.", "despues", "Probabilidades por tipo de basura, a calibrar."],
+  [5, "Captura tipo Interceptor", "EMPEORA", "En ROJO las barreras siguen encauzando.", "despues", "Debate abierto (soltarlas deja boyas sueltas)."],
+  [5, "Captura tipo Interceptor", "EMPEORA", "El peine solo existe en los bordes.", "despues", "Detalle visual y de porosidad; siguiente versión."],
+  [5, "Materiales", "EMPEORA", "No hay materiales estructurales en la lista.", "aplicado", "README: PETG o ASA, tornillería inoxidable, bujes de POM."],
+  [5, "Materiales", "EMPEORA", "Servo no estanco junto al agua.", "aplicado", "README: servo IP67 o caja con junta."],
+  [5, "Operación", "EMPEORA", "La panza no tiene límite ni sensor de lleno.", "despues", "Modo PANZA_LLENA en la siguiente versión."],
+  [5, "Operación", "EMPEORA", "Dos medidas de kilos distintas (35 g vs. 23,6 g por objeto).", "aplicado", "Se muestran el estimado y el real, más el error del contador."],
+  [5, "Operación", "EMPEORA", "Sin parada de emergencia ni modo mantenimiento.", "despues", "Prioritario para la estación real de la Fase 1."],
+
+  [6, "Gemelos digitales", "EMPEORA", "Con la barrera tapada al encender, el real detecta el atasco y el virtual no.", "aplicado", "Corregido (ver panel 3)."],
+  [6, "Gemelos digitales", "EMPEORA", "Falta el umbral de 30 del motor.", "aplicado", "Corregido (ver panel 4)."],
+  [6, "Gemelos digitales", "EMPEORA", "Con un ángulo NaN, el virtual lanza error y el real mueve el servo a 0°.", "aplicado", "El virtual imita al real y avisa."],
+  [6, "Gemelos digitales", "EMPEORA", "La caída de tensión detenía el programa del portátil.", "aplicado", "El portátil sigue mandando órdenes que nadie ejecuta, como en la realidad; la placa emite \"close\"."],
+  [6, "Gemelos digitales", "MEJORA", "Latencia del puerto serie.", "despues", "Siguiente versión."],
+  [6, "Actuadores", "EMPEORA", "El servo virtual trabaja en grados y el real en µs.", "despues", "Hoy coinciden por calibración; se modelará la curva µs → ángulo."],
+  [6, "Actuadores", "EMPEORA", "La carga de la banda no depende de la masa ni de la inclinación.", "despues", "Primero hay que resolver las escalas de masa."],
+  [6, "Actuadores", "EMPEORA", "La rampa sin corriente cae a velocidad fija.", "aplicado", "Ahora depende del par neto con el contrapeso."],
+  [6, "Simulación numérica", "EMPEORA", "El reloj del controlador se adelanta un 2 % al del río.", "aplicado", "La fracción de milisegundo se acumula."],
+  [6, "Simulación numérica", "EMPEORA", "La basura usa azar sin semilla: los fallos no se pueden repetir.", "aplicado", "Semilla visible en la consola; ?semilla= la repite."],
+  [6, "Simulación numérica", "EMPEORA", "La barrera IR se lee cada 50 ms.", "rechazado", "Sin efecto con un antirrebote de 120 ms."],
+  [6, "Simulación numérica", "EMPEORA", "avanzar(ms) avanza ms × velocidad sin decirlo.", "aplicado", "Documentado en el código."],
+  [6, "Cuerpos flotantes", "EMPEORA", "Se perdían objetos sin contarlos.", "aplicado", "Soltados = atrapados + escapados + descartados + en tránsito (verificado)."],
+  [6, "Cuerpos flotantes", "EMPEORA", "No había una verdad para medir el contador IR.", "aplicado", "\"Atrapados de verdad\" y \"error del contador\" en pantalla."],
+  [6, "Cuerpos flotantes", "EMPEORA", "La boca acumulaba basura sin límite.", "aplicado", "Capacidad de 40; lo demás rebosa y se cuenta como escapado."],
+  [6, "Escalado", "EMPEORA", "Los tiempos de la maqueta no están escalados a la escena real.", "despues", "Escalar las entradas de la barrera, no el reloj del controlador."],
+  [6, "Escalado", "EMPEORA", "Las masas mezclan escala real y de maqueta.", "despues", "Declarar la escala de cada número en la configuración."],
+
+  [7, "Render", "EMPEORA", "Unas 1.700 llamadas de dibujo por cuadro (objeto por objeto).", "despues", "InstancedMesh para postes, boyas, dientes y manglar en la siguiente versión."],
+  [7, "Render", "EMPEORA", "Las olas se calculan en la CPU en cada cuadro.", "despues", "Olas en el shader en la siguiente versión."],
+  [7, "Render", "EMPEORA", "Agua transparente sin necesidad.", "aplicado", "Agua opaca."],
+  [7, "Agua y clima", "EMPEORA", "Las olas iban 11 veces más rápido que la corriente.", "aplicado", "Las olas avanzan a la velocidad del agua."],
+  [7, "Agua y clima", "MEJORA", "Separar la velocidad visual de la basura del reloj hidrológico.", "rechazado", "La captura depende de la posición lógica; separarlas rompería el conteo."],
+  [7, "Agua y clima", "EMPEORA", "La basura se hundía entre las olas.", "aplicado", "La basura sigue la altura de la ola."],
+  [7, "Agua y clima", "MEJORA", "Agua de arroyo mate y agua de manglar distinta.", "aplicado", "Dos materiales."],
+  [7, "Agua y clima", "EMPEORA", "Gotas a 14 m/s.", "aplicado", "9 m/s, la velocidad terminal de una gota."],
+  [7, "Modelador del caimán", "EMPEORA", "La boca se veía menos abierta en alivio que capturando.", "aplicado", "33° capturando, 40° en alivio."],
+  [7, "Modelador del caimán", "EMPEORA", "Anatomía: mandíbula inferior más ancha, sin cresta entre los ojos, sin vientre claro.", "despues", "Detalles de modelado para la siguiente versión."],
+  [7, "Dirección de arte", "MEJORA", "No hay personas, carros ni señales: falta escala humana.", "aplicado", "Vecinos en los andenes, un carro y una señal \"PELIGRO ARROYO\"."],
+  [7, "Dirección de arte", "EMPEORA", "Los techos tenían ventanas.", "aplicado", "Techos lisos."],
+  [7, "Dirección de arte", "MEJORA", "Raíces de manglar y manchas en el concreto.", "despues", "Siguiente versión."],
+  [7, "Rendimiento móvil", "EMPEORA", "No llega a 30 FPS en un celular de gama media.", "aplicado", "Perfil de calidad baja automático en celulares (menos resolución, sombras y gotas)."],
+  [7, "Rendimiento móvil", "EMPEORA", "320 objetos de basura proyectan sombras invisibles.", "aplicado", "Sin sombra en basura y manglar; hojas solo en calidad alta."],
+  [7, "Rendimiento móvil", "EMPEORA", "Texturas generadas una por objeto al cargar.", "aplicado", "Texturas compartidas (fachadas por color, paneles, concreto)."],
+  [7, "Rendimiento móvil", "EMPEORA", "Etiquetas reescritas en cada cuadro.", "aplicado", "Se actualizan cada 120 ms."],
+
+  [8, "Interfaces", "EMPEORA", "Las fallas parecen botones normales.", "aplicado", "Borde naranja discontinuo y ⚠."],
+  [8, "Interfaces", "EMPEORA", "\"Corriente\" significaba dos cosas.", "aplicado", "\"Velocidad del agua\" y \"Consumo eléctrico\"."],
+  [8, "Interfaces", "EMPEORA", "Telemetría sin jerarquía; barra de amperios sin umbral.", "aplicado", "Nivel y lluvia más grandes; marca roja del límite del Arduino."],
+  [8, "Accesibilidad", "EMPEORA", "Sin doctype ni lang=\"es\": modo de compatibilidad y lectura con voz inglesa.", "aplicado", "Restaurados. Verificado: modo estándar."],
+  [8, "Accesibilidad", "EMPEORA", "Los cambios de alerta no se anuncian.", "aplicado", "Región aria-live (cortés) que anuncia solo las subidas."],
+  [8, "Accesibilidad", "EMPEORA", "Contraste insuficiente en bordes de botones y texto pequeño del banner.", "aplicado", "Borde #6b7380 y texto sin opacidad."],
+  [8, "Accesibilidad", "EMPEORA", "Verde y rojo se confunden con daltonismo.", "parcial", "El nivel se escribe en las etiquetas y la lista. El patrón en la franja de la gráfica queda para después."],
+  [8, "Accesibilidad", "EMPEORA", "Botones de alternar sin estado y sin reducir movimiento.", "aplicado", "aria-pressed y prefers-reduced-motion."],
+  [8, "Móvil", "EMPEORA", "La vista 3D atrapa el dedo en el celular.", "parcial", "Vista más baja. Desactivar el giro se rechazó: girar el caimán es el momento central de la feria."],
+  [8, "Móvil", "EMPEORA", "El aviso de caída de tensión podía quedar sin salida.", "aplicado", "La capa se desplaza."],
+  [8, "Móvil", "EMPEORA", "Controles de 13 px: iOS hace zoom.", "aplicado", "16 px y 44 px de alto en pantallas táctiles."],
+  [8, "Móvil", "EMPEORA", "\"Rueda para acercar\" no aplica en celular.", "aplicado", "Pista táctil."],
+  [8, "Identidad visual", "EMPEORA", "Sin favicon ni tipografía con carácter.", "parcial", "Favicon del caimán. Una tipografía de Google se rechazó: en una feria sin internet no cargaría."],
+  [8, "Identidad visual", "EMPEORA", "Decimales con punto en un país que usa coma.", "aplicado", "Formato es-CO en toda la pantalla y la consola."],
+  [8, "Identidad visual", "EMPEORA", "Emojis como iconos.", "aplicado", "Quitados de los botones."],
+  [8, "Visualización de datos", "EMPEORA", "La gráfica contradecía al sistema: el ojo 1 desbordado aparecía bajo la línea roja.", "aplicado", "Cada ojo como porcentaje de su nivel de peligro; 100 % = peligro."],
+  [8, "Visualización de datos", "EMPEORA", "Gráfica borrosa y deformada en celular.", "aplicado", "Se ajusta al tamaño y a la densidad de la pantalla."],
+  [8, "Visualización de datos", "EMPEORA", "Sin ejes; ojo 5 del mismo color que \"ahora\".", "aplicado", "Ejes en %, escala de lluvia, colores distintos y número de ojo en su pico."],
+  [8, "Visualización de datos", "EMPEORA", "Se veía el futuro igual que lo medido.", "aplicado", "Lo que viene, atenuado."],
+
+  [9, "Docente STEM", "MEJORA", "Botón \"¿Por qué pasa esto?\" en cada sección.", "despues", "Siguiente versión."],
+  [9, "Docente STEM", "MEJORA", "Proponer un reto con la masa de la rampa.", "aplicado", "Reto con pista de cálculo de par."],
+  [9, "Docente STEM", "EMPEORA", "Versión de Node inconsistente y sin instrucciones para Windows.", "aplicado", "Node 20.14 en todo y nota para Windows."],
+  [9, "Curador de feria", "EMPEORA", "Sin internet, la vista 3D queda en blanco.", "aplicado", "Three.js 0.160.0 dentro del proyecto. Verificado: carga local."],
+  [9, "Curador de feria", "EMPEORA", "El aguacero no vuelve a empezar solo.", "aplicado", "A los 60 min: \"Nuevo aguacero en 5 s\"."],
+  [9, "Curador de feria", "EMPEORA", "A ×20 el rugido no se ve ni se oye.", "aplicado", "Se muestra y suena al menos 1,2 s reales."],
+  [9, "Curador de feria", "EMPEORA", "La pantalla no dice qué es esto.", "aplicado", "Letrero fijo y tarjeta inicial."],
+  [9, "Visitante de 10 años", "EMPEORA", "\"Boca abierta\" justo cuando deja de comer confunde.", "aplicado", "\"El caimán está comiendo basura\" / \"levanta la cabeza para dejar pasar el agua\"."],
+  [9, "Visitante de 10 años", "EMPEORA", "Palabras que no conozco: PWM, Firmata, cota, telemetría.", "aplicado", "Lenguaje simple; lo técnico va en \"Cómo está hecho (avanzado)\"."],
+  [9, "Visitante de 10 años", "EMPEORA", "Las líneas azules de la gráfica parecen iguales.", "aplicado", "Colores distintos y número de ojo."],
+  [9, "Narradora", "EMPEORA", "Los datos que justifican el proyecto no aparecen.", "aplicado", "Tarjeta inicial con 134 personas y 50.000 t, con sus fuentes."],
+  [9, "Narradora", "MEJORA", "Medir los minutos de aviso.", "aplicado", "\"Minutos de aviso\" en pantalla (10 min en la demo, modelo sin calibrar)."],
+  [9, "Narradora", "EMPEORA", "En ROJO la pantalla solo habla de la máquina.", "aplicado", "\"Arroyo crecido: no lo cruce ni a pie ni en carro.\""],
+  [9, "Narradora", "MEJORA", "Marcar la línea de peligro como provisional.", "aplicado", "\"nivel de peligro (provisional)\" en la gráfica y en el muro."],
+  [9, "Narradora", "MEJORA", "Mostrar la basura clasificada.", "aplicado", "\"Lo que se comió el caimán\" por tipo."],
+  [9, "Corrector de estilo", "EMPEORA", "\"ALERTA ROJO\" no concuerda en género.", "aplicado", "ALERTA ROJA / AMARILLA."],
+  [9, "Corrector de estilo", "EMPEORA", "\"Ojo\" nombraba sensores y luces.", "aplicado", "\"Ojos\" son los sensores; las luces son \"luces de los ojos\"."],
+  [9, "Corrector de estilo", "EMPEORA", "Reloj \"/ 30:00\" en una demo de 60 min.", "aplicado", "\"Lluvia\" y \"Bajada\"."],
+  [9, "Debate", "—", "Modo feria (?feria=1) que oculte lo técnico.", "rechazado", "Lo técnico ya va plegado en \"avanzado\"."],
+
+  [10, "Arquitecto", "EMPEORA", "La física de la basura depende de la escena 3D y no tiene pruebas.", "despues", "Separar sim/rio.js con pruebas; ahora hay CI, así que es seguro hacerlo."],
+  [10, "Arquitecto", "EMPEORA", "Lógica de la demo duplicada en el simulador y en run.js.", "despues", "src/demo.js en la siguiente versión."],
+  [10, "Arquitecto", "EMPEORA", "Velocidad del agua y \"ojo 5\" repetidos.", "aplicado", "velocidadFlujo() y OJO_CAIMAN."],
+  [10, "Arquitecto", "EMPEORA", "El prototipo anterior está al lado y puede confundir.", "despues", "Decisión del equipo: archivarlo o borrarlo."],
+  [10, "Calidad de código", "EMPEORA", "Código muerto.", "aplicado", "Eliminado."],
+  [10, "Calidad de código", "EMPEORA", "Comentarios con Node 18 y dos formas de servir el simulador.", "aplicado", "Node 20.14 y un solo comando."],
+  [10, "Calidad de código", "EMPEORA", "14 variables globales sueltas.", "aplicado", "Agrupadas en un objeto estado."],
+  [10, "Rendimiento JS", "MEJORA", "filter() de temporizadores en cada milisegundo.", "rechazado", "Medido: 0,17 ms por cuadro. No vale la pena."],
+  [10, "Seguridad", "EMPEORA", "Un servidor falso podría mantener la boca cerrada.", "parcial", "Token opcional, respuesta validada y edad máxima de 30 s. Exigir https se rechazó: el servidor de laboratorio es local."],
+  [10, "Seguridad", "EMPEORA", "--servidor sin URL caía en silencio en la demo; secuencias de escape en la terminal.", "aplicado", "Error claro y texto limpiado."],
+  [10, "Seguridad", "EMPEORA", "Three.js desde un CDN sin integridad.", "aplicado", "Resuelto al llevar Three.js dentro del proyecto."],
+  [10, "Seguridad", "EMPEORA", "Dependencias opcionales deprecadas de johnny-five.", "despues", "overrides de npm cuando la CI esté verde en las tres versiones de Node."],
+  [10, "Seguridad", "EMPEORA", "window.__caiman expuesto en producción.", "rechazado", "Lo usan las pruebas y las demostraciones; no hay secretos."],
+  [10, "DevOps", "EMPEORA", "No hay integración continua.", "aplicado", "GitHub Actions corre npm test en Node 20, 22 y 24."],
+  [10, "DevOps", "EMPEORA", "El simulador necesita internet.", "aplicado", "Three.js en vendor/."],
+  [10, "DevOps", "EMPEORA", "Caché de 10 min tras republicar.", "rechazado", "Recargar antes de la feria; documentado."],
+  [10, "DevOps", "MEJORA", "Prueba de humo con navegador en CI.", "despues", "Siguiente versión."],
+];
+
+const NOMBRE = { aplicado: "Aplicado", parcial: "En parte", despues: "Para la Fase 1", rechazado: "Rechazado" };
+const cuenta = D.reduce((a, d) => (a[d[4]] = (a[d[4]] || 0) + 1, a), {});
+document.getElementById("cifras").innerHTML =
+  `<div class="cifra"><b>${D.length}</b><span>argumentos juzgados</span></div>` +
+  ["aplicado", "parcial", "despues", "rechazado"].map((k) => `<div class="cifra ${k}"><b>${cuenta[k] || 0}</b><span>${NOMBRE[k]}</span></div>`).join("");
+
+const esc = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+let filtro = "todas", texto = "";
+function pintar() {
+  const q = texto.trim().toLowerCase();
+  document.getElementById("paneles").innerHTML = PANELES.map((nombre, i) => {
+    const filas = D.filter((d) => d[0] === i + 1 && (filtro === "todas" || d[4] === filtro) && (!q || d.join(" ").toLowerCase().includes(q)));
+    if (!filas.length) return "";
+    const n = D.filter((d) => d[0] === i + 1);
+    const ap = n.filter((d) => d[4] === "aplicado" || d[4] === "parcial").length;
+    return `<section class="panel"><header><h2>Panel ${i + 1} · ${nombre}</h2><small>${ap} de ${n.length} aplicados total o parcialmente</small></header>
+      <div class="tabla"><table><thead><tr><th>Especialista</th><th>Argumento</th><th>Decisión</th></tr></thead><tbody>
+      ${filas.map((d) => `<tr><td class="quien">${esc(d[1])}<br><span class="tipo">${d[2]}</span></td><td>${esc(d[3])}<br><span class="razon">${esc(d[5])}</span></td><td><span class="chip ${d[4]}">${NOMBRE[d[4]]}</span></td></tr>`).join("")}
+      </tbody></table></div></section>`;
+  }).join("") || "<p>Ningún argumento coincide con la búsqueda.</p>";
+}
+document.querySelectorAll(".filtros button").forEach((b) => b.addEventListener("click", () => {
+  filtro = b.dataset.f;
+  document.querySelectorAll(".filtros button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+  pintar();
+}));
+document.getElementById("buscar").addEventListener("input", (e) => { texto = e.target.value; pintar(); });
+pintar();
+</script>
+<style>.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }</style>
+</body>
+</html>

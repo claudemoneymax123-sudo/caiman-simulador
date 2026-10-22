@@ -2,19 +2,20 @@
 //
 //   npm run maqueta -- --servidor http://localhost:8000
 //       consulta GET /alerta del servidor ("cerebro") cada 5 s
+//       (si el servidor pide clave: CAIMAN_TOKEN=... se manda como "Authorization: Bearer")
 //   npm run demo
-//       feria sin internet: aguacero de 30 min simulado en el portátil
+//       feria sin internet: 30 min de lluvia + 30 de bajada simulados en el portátil
 //   npm run demo -- --rapido 20
-//       el mismo aguacero en 90 s
+//       el mismo aguacero en 3 min
 //   npm run demo -- --sin-placa
 //       todo simulado (sin Arduino), para probar en cualquier portátil
 //
-// CAIMAN_PORT=/dev/tty.usbmodemXXXX elige el puerto si la detección falla.
-// Requiere Node 18+ y StandardFirmata cargado en el Uno.
+// CAIMAN_PORT=/dev/tty.usbmodemXXXX (o COM3 en Windows) elige el puerto si la detección falla.
+// Requiere Node.js 20.14 o más nuevo y StandardFirmata cargado en el Uno.
 
 import { crearEstacion } from "../src/estacion.js";
 import { crearCerebro } from "../src/cerebro.js";
-import { crearAguacero, crearFuenteDemo } from "../src/aguacero.js";
+import { crearAguacero, crearFuenteDemo, OJO_CAIMAN } from "../src/aguacero.js";
 import { CONFIG, UMBRALES } from "../src/config.js";
 
 const args = process.argv.slice(2);
@@ -23,6 +24,12 @@ const servidor = opcion("--servidor");
 const rapido = Math.max(1, Number(opcion("--rapido")) || 1);
 const sinPlaca = args.includes("--sin-placa");
 const reportar = args.includes("--reportar");
+
+// "--servidor" sin URL NO puede caer en silencio en la demo: la maqueta obedecería un aguacero falso.
+if (args.includes("--servidor") && !/^https?:\/\//i.test(servidor ?? "")) {
+  console.error("✖ --servidor necesita una URL, por ejemplo: npm run maqueta -- --servidor http://localhost:8000");
+  process.exit(1);
+}
 
 let five, board, reloj;
 if (sinPlaca) {
@@ -43,37 +50,68 @@ board.on("ready", () => {
   if (servidor) consultarServidor(est);
   else demoAguacero(est);
 
-  // Al salir (Ctrl+C): boca abierta (falla segura) y banda quieta. Con la placa
-  // real, Johnny-Five atrapa Ctrl+C, emite "exit" y espera a que salgan los
-  // últimos mensajes por el puerto antes de cerrar.
-  board.on("exit", () => est.shutdown());
-  if (sinPlaca) process.on("SIGINT", () => { est.shutdown(); process.exit(0); });
+  // Al salir: boca abierta (falla segura) y banda quieta. Con la placa real,
+  // Johnny-Five atrapa Ctrl+C, emite "exit" y espera a que salgan los últimos
+  // mensajes por el puerto antes de cerrar. Lo demás (kill, errores) se cubre aquí.
+  let cerrando = false;
+  const salirSeguro = (motivo, codigo) => {
+    if (cerrando) return;
+    cerrando = true;
+    if (motivo) console.error(motivo);
+    try { est.shutdown(); } catch { /* el puerto puede estar caído */ }
+    setTimeout(() => process.exit(codigo), 400);
+  };
+  board.on("exit", () => { cerrando = true; est.shutdown(); });
+  process.on("SIGTERM", () => salirSeguro("Señal de cierre: boca abierta y banda detenida.", 0));
+  process.on("uncaughtException", (e) => salirSeguro(`✖ Error inesperado: ${e.message}. Boca abierta y banda detenida.`, 1));
+  if (sinPlaca) process.on("SIGINT", () => salirSeguro("", 0));
 });
 
 board.on("error", (err) => {
-  console.error(`Error de la placa: ${err.message}`);
+  console.error(`✖ Error de la placa: ${err.message}`);
   process.exit(1);
 });
+// Se cayó el USB o se reinició el Uno: desde aquí ya no se puede mover nada.
+for (const ev of ["close", "disconnect"]) {
+  board.on(ev, () => {
+    console.error("✖ Se perdió la conexión con el Arduino. La maqueta quedó en su último estado:");
+    console.error("  revise el cable USB y la alimentación, y vuelva a iniciar.");
+    process.exit(1);
+  });
+}
+
+// Texto del servidor sin caracteres de control (no se deja escribir secuencias en la terminal).
+const limpio = (s) => String(s ?? "").replace(/[\x00-\x1f\x7f]/g, "").slice(0, 200);
 
 // ---- Campo: el servidor de alertas decide ----------------------------------------
 // Espera de GET /alerta un JSON como { "nivel": "NARANJA", "motivo": "..." }.
-// Si no responde, la estación pasa sola a SIN_DATOS y luego abre la boca.
+// Campos opcionales que la estación respeta si el servidor los manda:
+//   "sinDatos": true      el servidor no tiene ojos vivos
+//   "ojosVivos": 0        cuántos ojos reportan
+//   "t": 1729600000000    hora de la alerta (ms); si tiene más de 30 s, se descarta
+// En esos casos NO se renueva la alerta: la estación pasa sola a SIN_DATOS y luego abre la boca.
 function consultarServidor(est) {
   const base = servidor.replace(/\/$/, "");
+  const headers = process.env.CAIMAN_TOKEN ? { authorization: `Bearer ${process.env.CAIMAN_TOKEN}` } : {};
   let fallando = false;
   console.log(`Consultando ${base}/alerta cada 5 s`);
-  setInterval(async () => {
+  const consultar = async () => {
     try {
-      const r = await fetch(`${base}/alerta`, { signal: AbortSignal.timeout(3000) });
+      const r = await fetch(`${base}/alerta`, { headers, signal: AbortSignal.timeout(3000) });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const a = await r.json();
-      est.setAlerta(a.nivel ?? a.alerta, a.motivo ?? "");
+      if (!a || typeof a !== "object") throw new Error("respuesta que no es un objeto JSON");
+      if (a.sinDatos === true || a.ojosVivos === 0) throw new Error("el servidor no tiene datos de los ojos");
+      if (Number.isFinite(a.t) && Date.now() - a.t > 30000) throw new Error("alerta vieja (más de 30 s)");
+      est.setAlerta(limpio(a.nivel ?? a.alerta), limpio(a.motivo));
       if (fallando) { console.log("Servidor de alertas de vuelta"); fallando = false; }
     } catch (e) {
-      if (!fallando) console.log(`Sin respuesta de ${base}/alerta (${e.message})`);
+      if (!fallando) console.log(`Sin alerta válida de ${base}/alerta (${limpio(e.message)})`);
       fallando = true;
     }
-  }, 5000);
+  };
+  consultar(); // la primera, ya: tras un reinicio no hay que esperar 5 s
+  setInterval(consultar, 5000);
 
   if (reportar) {
     // Propuesta: el servidor aún no tiene este endpoint de escritura (la
@@ -83,7 +121,7 @@ function consultarServidor(est) {
       try {
         await fetch(`${base}/estacion/basura`, {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: { "content-type": "application/json", ...headers },
           body: JSON.stringify({ objetos, kg }),
           signal: AbortSignal.timeout(3000),
         });
@@ -99,20 +137,21 @@ function demoAguacero(est) {
     ag = crearAguacero();
     fuente = crearFuenteDemo({ aguacero: ag, cerebro: crearCerebro(UMBRALES), umbrales: UMBRALES });
     t0 = Date.now();
-    console.log(`Aguacero de demostración: 30 min${rapido > 1 ? ` a ×${rapido} (${(1800 / rapido).toFixed(0)} s)` : ""}`);
+    console.log(`Aguacero de demostración: 30 min de lluvia + 30 de bajada${rapido > 1 ? ` a ×${rapido} (${(3600 / rapido).toFixed(0)} s)` : ""}`);
   };
   empezar();
   let ultimoResumen = -Infinity;
+  const mmss = (s) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+  const coma = (v, d = 1) => v.toFixed(d).replace(".", ",");
   setInterval(() => {
     const tS = ((Date.now() - t0) / 1000) * rapido;
-    if (tS > 3600) { console.log("Fin del aguacero (60 min). Empieza otro."); empezar(); return; }
+    if (tS > 3600) { console.log("Fin de la demostración (30 min de lluvia y 30 de bajada). Empieza otro aguacero."); ultimoResumen = -Infinity; empezar(); return; }
     const a = fuente.actualizar(tS);
-    est.setAlerta(a.nivel, a.motivo);
+    if (!a.sinDatos) est.setAlerta(a.nivel, a.motivo);
     if (tS - ultimoResumen >= 30) {
       ultimoResumen = tS;
-      const mm = `${String(Math.floor(tS / 60)).padStart(2, "0")}:${String(Math.floor(tS % 60)).padStart(2, "0")}`;
       const st = est.status();
-      console.log(`[aguacero ${mm}] lluvia ${ag.lluviaMmMin(tS).toFixed(1)} mm/min · nivel ${ag.nivelCm(5, tS).toFixed(0)} cm · ${a.nivel} · ${st.modo} · ${st.objetos} objetos`);
+      console.log(`[aguacero ${mmss(tS)}] lluvia ${coma(ag.lluviaMmMin(tS))} mm/min · nivel ${ag.nivelCm(OJO_CAIMAN, tS).toFixed(0)} cm · alerta ${a.nivel} · ${st.modo} · ${st.objetos} objetos`);
     }
   }, Math.max(250, 5000 / rapido));
 }

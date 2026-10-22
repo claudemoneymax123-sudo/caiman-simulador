@@ -24,6 +24,8 @@ export const CONFIG = Object.freeze({
     cerradaDeg: 20,       // calibrar: rampa tocando el agua
     abiertaDeg: 80,       // calibrar: rampa ~35° sobre la horizontal, fuera del agua
     velCierreDegS: 30,    // cerrar despacio, nunca de golpe
+    // Al arrancar se manda ABIERTA (abrir de golpe es seguro) y luego cierra despacio:
+    // así un reinicio nunca deja caer la rampa a toda velocidad desde arriba.
   }),
 
   banda: Object.freeze({
@@ -38,6 +40,7 @@ export const CONFIG = Object.freeze({
     atascoMs: 3000,       // haz cortado más de esto = algo atascado en la banda
     reintentosAtasco: 3,
     pausaAtascoMs: 4000,
+    rugidoPorKilo: true,  // rugido corto por cada kilo (en campo puede apagarse para no confundirlo con la alarma)
   }),
 
   // Aviso del servidor ("cerebro"): GET /alerta.
@@ -63,16 +66,18 @@ export const UMBRALES = Object.freeze({
   lluvia10minMm: 8,          // AMARILLO: lluvia fuerte aguas arriba
   subidaCmMin: 4,            // NARANJA: el nivel sube rápido
   ventanaSubidaMin: 2,
-  bajarTrasMin: 5,           // la alerta solo baja tras 5 min sin cumplir la condición
+  bajarTrasMin: 5,           // la alerta baja UN escalón por cada 5 min sin cumplir la condición
+  ojoSinDatosS: 180,         // un ojo sin lecturas en 3 min se marca "sin datos" (no cuenta como VERDE)
   // Cota de desborde (ROJO) de cada ojo, en cm sobre el fondo del cauce.
   ojos: Object.freeze([
     { id: 1, nombre: "Ojo 1 · Rebolo alto", cotaDesbordeCm: 110 },
     { id: 2, nombre: "Ojo 2", cotaDesbordeCm: 120 },
     { id: 3, nombre: "Ojo 3", cotaDesbordeCm: 130 },
     { id: 4, nombre: "Ojo 4", cotaDesbordeCm: 140 },
-    { id: 5, nombre: "Ojo 5 · Caimán 1", cotaDesbordeCm: 150 },
+    { id: 5, nombre: "Ojo 5 · junto al caimán", cotaDesbordeCm: 150 },
   ]),
-  // Firmware del ojo: lectura cada 60 s; cada 15 s si sube > 15 cm en 2 min.
+  // Firmware del ojo (según la especificación de la Fase 1): lectura cada 60 s;
+  // cada 15 s si sube > 15 cm en 2 min.
   envioNormalS: 60,
   envioRapidoS: 15,
   rapidoSiSubeCm: 15,

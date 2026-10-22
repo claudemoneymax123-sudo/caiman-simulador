@@ -32,9 +32,11 @@ export const MODOS = Object.freeze({
 });
 
 const RUGIDOS = Object.freeze({
-  largo: [700, 250, 700, 250, 1200], // al pasar a ROJO
+  largo: [700, 250, 700, 250, 1200], // al pasar a ROJO o al abrir por falta de datos
+  atasco: [250, 150, 250, 150, 250], // la banda quedó atascada sin remedio
   corto: [250],                      // cada kilo de basura
 });
+const PRIORIDAD_RUGIDO = Object.freeze({ largo: 3, atasco: 2, corto: 1 });
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
@@ -45,7 +47,9 @@ export function crearEstacion(five, board, config = CONFIG, opts = {}) {
   const marca = () => `[${(now() / 1000).toFixed(1)}s]`;
 
   // ---- Hardware -----------------------------------------------------------
-  const compuerta = new five.Servo({ pin: P.compuerta, range: [C.cerradaDeg, C.abiertaDeg], startAt: C.cerradaDeg });
+  // Arranca ABIERTA y el ciclo la cierra a velCierreDegS: un reinicio nunca deja
+  // caer la rampa de golpe (un servo de hobby no sabe dónde quedó al apagarse).
+  const compuerta = new five.Servo({ pin: P.compuerta, range: [C.cerradaDeg, C.abiertaDeg], startAt: C.abiertaDeg });
   const banda = new five.Motor({ pin: P.banda });
   const ojos = new five.Led.RGB({ pins: { red: P.ojoRojo, green: P.ojoVerde, blue: P.ojoAzul } });
   const rugido = new five.Pin(P.rugido);
@@ -56,8 +60,15 @@ export function crearEstacion(five, board, config = CONFIG, opts = {}) {
   let motivo = "arranque";
   let alertaEn = now();
 
-  function setAlerta(nivel, porQue = "") {
-    if (!NIVELES.includes(nivel)) { log(`${marca()} alerta desconocida "${nivel}" (ignorada)`); return; }
+  let avisoDesconocida = false;
+  function setAlerta(nivelRecibido, porQue = "") {
+    const nivel = String(nivelRecibido ?? "").trim().toUpperCase(); // "rojo " -> "ROJO"
+    if (!NIVELES.includes(nivel)) {
+      if (!avisoDesconocida) log(`${marca()} alerta desconocida "${nivelRecibido}" (ignorada: cuenta como sin datos)`);
+      avisoDesconocida = true;
+      return;
+    }
+    avisoDesconocida = false;
     alertaEn = now();
     if (nivel === alerta) { motivo = porQue || motivo; return; }
     log(`${marca()} alerta ${alerta} -> ${nivel}${porQue ? ` (${porQue})` : ""}`);
@@ -68,7 +79,11 @@ export function crearEstacion(five, board, config = CONFIG, opts = {}) {
 
   // ---- Rugido (buzzer) sin bloquear el ciclo ------------------------------
   let rugidoPatron = null, rugidoInicio = 0, rugidoPin = false;
-  function rugir(tipo) { rugidoPatron = RUGIDOS[tipo]; rugidoInicio = now(); }
+  let rugidoTipo = null;
+  function rugir(tipo) {
+    if (rugidoPatron && PRIORIDAD_RUGIDO[rugidoTipo] > PRIORIDAD_RUGIDO[tipo]) return; // no cortar un aviso más importante
+    rugidoPatron = RUGIDOS[tipo]; rugidoTipo = tipo; rugidoInicio = now();
+  }
   function actualizarRugido(t) {
     let alto = false;
     if (rugidoPatron) {
@@ -81,6 +96,9 @@ export function crearEstacion(five, board, config = CONFIG, opts = {}) {
   }
 
   // ---- Contador de basura (barrera infrarroja al final de la banda) --------
+  // Antirrebote de ventana deslizante: cortes separados por menos de antirreboteMs
+  // son el MISMO objeto (una bolsa que aletea cuenta una vez). Dos objetos pegados
+  // también cuentan como uno: con una sola barrera no se pueden separar.
   let objetos = 0, ultimoCorte = -Infinity, kgAnunciados = 0, cortadoDesde = null;
   barrera.on("press", () => {           // haz cortado
     const t = now();
@@ -88,14 +106,18 @@ export function crearEstacion(five, board, config = CONFIG, opts = {}) {
     if (t - ultimoCorte >= K.antirreboteMs) {
       objetos++;
       const kg = Math.floor((objetos * K.masaPromedioG) / 1000);
-      if (kg > kgAnunciados) { kgAnunciados = kg; log(`${marca()} ${kg} kg de basura atrapada`); rugir("corto"); }
+      if (kg > kgAnunciados) {
+        kgAnunciados = kg;
+        log(`${marca()} ${kg} kg de basura atrapada (estimado)`);
+        if (K.rugidoPorKilo !== false) rugir("corto");
+      }
     }
     ultimoCorte = t;
   });
   barrera.on("release", () => { cortadoDesde = null; });
 
   // ---- Actuadores: solo se envía lo que cambia (ahorra el puerto serie) ---
-  let compuertaCmd = C.cerradaDeg, compuertaEnviada = NaN;
+  let compuertaCmd = C.abiertaDeg, compuertaEnviada = NaN;
   const enviarCompuerta = (deg) => {
     const d = Math.round(clamp(deg, C.cerradaDeg, C.abiertaDeg));
     if (d !== compuertaEnviada) { compuerta.to(d); compuertaEnviada = d; }
@@ -121,8 +143,13 @@ export function crearEstacion(five, board, config = CONFIG, opts = {}) {
   const cambiarModo = (nuevo, porQue) => {
     if (nuevo === modo) return;
     log(`${marca()} modo ${modo} -> ${nuevo}${porQue ? ` (${porQue})` : ""}`);
+    const veniaDeAlivio = modo === MODOS.ALIVIO || modo === MODOS.ALIVIO_SIN_DATOS;
     modo = nuevo;
+    if (nuevo === MODOS.ALIVIO_SIN_DATOS) rugir("largo"); // abrir por seguridad también se avisa
+    if (veniaDeAlivio && cortadoDesde !== null) cortadoDesde = now(); // la banda estuvo parada: no es atasco aún
+    if (veniaDeAlivio) atascoIntentos = 0;
   };
+  let avisoVencida = false;
 
   let apagado = false;
 
@@ -134,10 +161,11 @@ export function crearEstacion(five, board, config = CONFIG, opts = {}) {
 
     // Atasco: el haz lleva cortado demasiado tiempo con la banda andando.
     const hazTapado = cortadoDesde !== null && t - cortadoDesde >= K.atascoMs;
-    if (modo === MODOS.CAPTURA && hazTapado && bandaEnviada > 0) {
+    if ((modo === MODOS.CAPTURA || modo === MODOS.SIN_DATOS) && hazTapado && bandaEnviada > 0) {
       atascoIntentos++;
       atascoDesde = t;
       cambiarModo(MODOS.ATASCO, `barrera IR tapada (intento ${atascoIntentos}/${K.reintentosAtasco})`);
+      if (atascoIntentos >= K.reintentosAtasco) rugir("atasco");
     }
     if (modo === MODOS.ATASCO) {
       if (cortadoDesde === null) {
@@ -156,6 +184,10 @@ export function crearEstacion(five, board, config = CONFIG, opts = {}) {
     else if (edadAlerta > X.sinDatosMs) cambiarModo(MODOS.SIN_DATOS, "no llega la alerta");
     else cambiarModo(MODOS.CAPTURA, `alerta ${alerta}`);
 
+    const vencida = edadAlerta > X.sinDatosMs;
+    if (vencida && alerta === "ROJO" && !avisoVencida) log(`${marca()} aviso: la alerta ROJA no se renueva hace ${Math.round(edadAlerta / 1000)} s (la boca sigue abierta)`);
+    avisoVencida = vencida;
+
     const abierta = modo === MODOS.ALIVIO || modo === MODOS.ALIVIO_SIN_DATOS;
 
     // Compuerta: abrir a toda velocidad; cerrar despacio.
@@ -172,7 +204,8 @@ export function crearEstacion(five, board, config = CONFIG, opts = {}) {
     // Ojos: color de la alerta y patrón según el modo.
     const parpadeo = (hz) => (Math.floor((t / 1000) * hz * 2) % 2 === 0 ? 1 : 0.08);
     if (modo === MODOS.ATASCO) enviarOjos(colores.ATASCO, parpadeo(2));
-    else if (modo === MODOS.SIN_DATOS || modo === MODOS.ALIVIO_SIN_DATOS)
+    else if (modo === MODOS.ALIVIO_SIN_DATOS) enviarOjos(colores.SIN_DATOS, parpadeo(1)); // nunca verde con la boca abierta por seguridad
+    else if (modo === MODOS.SIN_DATOS)
       enviarOjos(Math.floor(t / 1000) % 2 ? colores.SIN_DATOS : colores[alerta]);
     else if (alerta === "ROJO") enviarOjos(colores.ROJO, parpadeo(3));
     else if (alerta === "NARANJA") enviarOjos(colores.NARANJA, parpadeo(1));
@@ -184,8 +217,8 @@ export function crearEstacion(five, board, config = CONFIG, opts = {}) {
     enviarBanda(bandaCmd);
   }
 
-  // Estado inicial seguro: boca cerrada, banda quieta, ojos verdes tenues.
-  enviarCompuerta(C.cerradaDeg);
+  // Estado inicial seguro: boca abierta (cierra despacio en el ciclo), banda quieta, ojos verdes tenues.
+  enviarCompuerta(C.abiertaDeg);
   enviarBanda(0);
   enviarOjos(colores.VERDE, 0.3);
   board.loop(config.bucleMs, tick);
@@ -201,6 +234,8 @@ export function crearEstacion(five, board, config = CONFIG, opts = {}) {
       objetos,
       kg: (objetos * K.masaPromedioG) / 1000,
       atascoIntentos,
+      atascoDefinitivo: modo === MODOS.ATASCO && atascoIntentos >= K.reintentosAtasco,
+      alertaVencida: now() - alertaEn > X.sinDatosMs,
       rugiendo: rugidoPin,
       ojos: colorEnviado,
     }),

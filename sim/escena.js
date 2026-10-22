@@ -78,14 +78,17 @@ const texPanel = () => lienzo(256, 256, (g, w, h) => {
   for (let y = 0; y <= h; y += h / 10) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); }
 });
 
+const cacheTex = new Map();
+const unaVez = (clave, crear) => cacheTex.get(clave) || cacheTex.set(clave, crear()).get(clave);
+
 function texFachada(color) {
-  return lienzo(128, 128, (g, w, h) => {
+  return unaVez(`fachada:${color}`, () => lienzo(128, 128, (g, w, h) => {
     g.fillStyle = color; g.fillRect(0, 0, w, h);
     g.fillStyle = "rgba(0,0,0,.08)"; g.fillRect(0, h - 10, w, 10);
     g.fillStyle = "#2b3440";
     for (let x = 14; x < w - 20; x += 40) g.fillRect(x, 30, 22, 30);
     g.fillStyle = "#5b3a24"; g.fillRect(w / 2 - 10, 78, 20, 50);
-  });
+  }));
 }
 
 // ---- Geometrías -----------------------------------------------------------------
@@ -129,7 +132,10 @@ function etiqueta(texto, cls = "") {
 }
 
 // ---- Escena ---------------------------------------------------------------------
-export function construirEscena(renderer) {
+export const RAMPA_DARSENA = { desdeX: -14, hastaX: 12, hondoM: 1.7 }; // fosa bajo la estación (supuesto de diseño)
+
+export function construirEscena(renderer, opts = {}) {
+  const baja = opts.calidad === "baja";
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 3000);
   camera.position.set(-33, 7.5, 9.5);
@@ -143,7 +149,7 @@ export function construirEscena(renderer) {
   const solLuz = new THREE.DirectionalLight("#fff1dc", 2.6);
   solLuz.position.copy(sol).multiplyScalar(120);
   solLuz.castShadow = true;
-  solLuz.shadow.mapSize.set(2048, 2048);
+  solLuz.shadow.mapSize.set(baja ? 1024 : 2048, baja ? 1024 : 2048);
   Object.assign(solLuz.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 1, far: 400 });
   solLuz.shadow.bias = -0.0005;
   scene.add(solLuz);
@@ -156,12 +162,35 @@ export function construirEscena(renderer) {
   // ---- Canal de concreto ----
   const { fondoY, mediaFondo, mediaBorde, xIni, xFin } = CANAL;
   const largoCanal = xFin - xIni;
-  const concreto = new THREE.MeshStandardMaterial({ map: texConcreto(), roughness: 0.92 });
-  concreto.map.repeat.set(1, 1);
+  const tConcreto = unaVez("concreto", texConcreto);
+  const concreto = new THREE.MeshStandardMaterial({ map: tConcreto, roughness: 0.92 });
   const muroI = new THREE.Mesh(quad([xIni, fondoY, -mediaFondo], [xFin, fondoY, -mediaFondo], [xFin, 0, -mediaBorde], [xIni, 0, -mediaBorde], largoCanal / 6, 1), concreto);
   const muroD = new THREE.Mesh(quad([xFin, fondoY, mediaFondo], [xIni, fondoY, mediaFondo], [xIni, 0, mediaBorde], [xFin, 0, mediaBorde], largoCanal / 6, 1), concreto);
-  const fondo = new THREE.Mesh(quad([xIni, fondoY, mediaFondo], [xFin, fondoY, mediaFondo], [xFin, fondoY, -mediaFondo], [xIni, fondoY, -mediaFondo], largoCanal / 6, 1), concreto);
-  for (const m of [muroI, muroD, fondo]) { m.receiveShadow = true; m.material.side = THREE.DoubleSide; scene.add(m); }
+  // Fondo con una dársena (fosa) bajo la estación: así la rampa abajo y el casco
+  // tienen agua debajo aun con el arroyo casi seco, en vez de atravesar el concreto.
+  const { desdeX: dX0, hastaX: dX1, hondoM } = RAMPA_DARSENA, yD = fondoY - hondoM;
+  const fondo = [
+    quad([xIni, fondoY, mediaFondo], [dX0, fondoY, mediaFondo], [dX0, fondoY, -mediaFondo], [xIni, fondoY, -mediaFondo], (dX0 - xIni) / 6, 1),
+    quad([dX1, fondoY, mediaFondo], [xFin, fondoY, mediaFondo], [xFin, fondoY, -mediaFondo], [dX1, fondoY, -mediaFondo], (xFin - dX1) / 6, 1),
+    quad([dX0, yD, mediaFondo], [dX1, yD, mediaFondo], [dX1, yD, -mediaFondo], [dX0, yD, -mediaFondo], (dX1 - dX0) / 6, 1),
+    quad([dX0, fondoY, -mediaFondo], [dX0, fondoY, mediaFondo], [dX0, yD, mediaFondo], [dX0, yD, -mediaFondo], 1, 0.5),
+    quad([dX1, fondoY, mediaFondo], [dX1, fondoY, -mediaFondo], [dX1, yD, -mediaFondo], [dX1, yD, mediaFondo], 1, 0.5),
+    quad([dX0, yD, -mediaFondo], [dX1, yD, -mediaFondo], [dX1, fondoY, -mediaFondo], [dX0, fondoY, -mediaFondo], (dX1 - dX0) / 6, 0.5),
+    quad([dX1, yD, mediaFondo], [dX0, yD, mediaFondo], [dX0, fondoY, mediaFondo], [dX1, fondoY, mediaFondo], (dX1 - dX0) / 6, 0.5),
+  ].map((g) => new THREE.Mesh(g, concreto));
+  for (const m of [muroI, muroD, ...fondo]) { m.receiveShadow = true; m.material.side = THREE.DoubleSide; scene.add(m); }
+
+  // Marca roja de la cota de desborde del ojo 5 pintada en los muros (provisional)
+  const cotaM = opts.cotaM ?? 1.5;
+  const zEn = (h) => mediaFondo + (h / -fondoY) * (mediaBorde - mediaFondo) - 0.03;
+  const rojaMat = new THREE.MeshBasicMaterial({ color: "#e0262b", side: THREE.DoubleSide });
+  for (const sg of [-1, 1]) {
+    const h0 = cotaM - 0.05, h1 = cotaM + 0.05;
+    scene.add(new THREE.Mesh(quad([-40, fondoY + h0, sg * zEn(h0)], [xFin, fondoY + h0, sg * zEn(h0)], [xFin, fondoY + h1, sg * zEn(h1)], [-40, fondoY + h1, sg * zEn(h1)], 1, 1), rojaMat));
+  }
+  const etCota = etiqueta("nivel de peligro (provisional)", "cota");
+  etCota.position.set(-30, fondoY + cotaM + 0.35, -zEn(cotaM));
+  scene.add(etCota);
 
   // Calles y andenes a ambos lados
   const asfalto = new THREE.MeshStandardMaterial({ map: texAsfalto(), roughness: 0.95 });
@@ -186,7 +215,7 @@ export function construirEscena(renderer) {
   }
 
   // Puente de la carrera (aguas arriba)
-  const puente = new THREE.Mesh(new THREE.BoxGeometry(9, 0.8, 2 * mediaBorde + 8), new THREE.MeshStandardMaterial({ map: texConcreto(), roughness: 0.9 }));
+  const puente = new THREE.Mesh(new THREE.BoxGeometry(9, 0.8, 2 * mediaBorde + 8), concreto);
   puente.position.set(-52, 0.1, 0);
   puente.castShadow = puente.receiveShadow = true;
   scene.add(puente);
@@ -194,12 +223,15 @@ export function construirEscena(renderer) {
   // Barrio: casas bajas de colores
   let s = 11;
   const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+  const techoMat = new THREE.MeshStandardMaterial({ color: "#a9a59b", roughness: 0.9 });
   const colores = ["#f2d16b", "#e98c6a", "#7ec4cf", "#b8d98a", "#f5f0e6", "#d9a5c8", "#f0a24a", "#9fb7e0"];
   for (const lado of [-1, 1]) {
     for (let x = xIni - 25; x < xFin + 5; x += 7 + rnd() * 3) {
       const ancho = 6 + rnd() * 3, alto = 3 + rnd() * 4.5, fondoC = 7 + rnd() * 4;
-      const mat = new THREE.MeshStandardMaterial({ map: texFachada(colores[Math.floor(rnd() * colores.length)]), roughness: 0.85 });
-      const casa = new THREE.Mesh(new THREE.BoxGeometry(ancho, alto, fondoC), mat);
+      const color = colores[Math.floor(rnd() * colores.length)];
+      const mat = unaVez(`matFachada:${color}`, () => new THREE.MeshStandardMaterial({ map: texFachada(color), roughness: 0.85 }));
+      // Fachadas a los lados, techo y piso lisos (antes había ventanas en el techo)
+      const casa = new THREE.Mesh(new THREE.BoxGeometry(ancho, alto, fondoC), [mat, mat, techoMat, techoMat, mat, mat]);
       casa.position.set(x, alto / 2, lado * (mediaBorde + 15 + fondoC / 2 + rnd() * 2));
       casa.castShadow = casa.receiveShadow = true;
       scene.add(casa);
@@ -239,7 +271,7 @@ export function construirEscena(renderer) {
       f.rotation.set(Math.PI / 2 - 0.5, (i / 8) * Math.PI * 2, 0, "YXZ");
       f.translateY(1.6);
       f.scale.set(1, 1, 0.15);
-      f.castShadow = true;
+      f.castShadow = !baja;
       g.add(f);
     }
     g.position.set(x, 0, z);
@@ -258,12 +290,13 @@ export function construirEscena(renderer) {
     const m = new THREE.Mesh(new THREE.IcosahedronGeometry(2 + rnd() * 3, 1), manglar);
     m.position.set(xFin + 8 + rnd() * 120, fondoY + 1.4 + rnd() * 1.2, lado * (23 + rnd() * 30));
     m.scale.y = 0.6;
-    m.castShadow = true;
     scene.add(m);
   }
 
   // ---- Agua (sube y baja con el nivel; olas animadas) ----
-  const aguaMat = new THREE.MeshPhysicalMaterial({ color: "#5c4a2c", roughness: 0.18, metalness: 0.0, clearcoat: 0.5, transparent: true, opacity: 0.96 });
+  // Agua de arroyo cargada de sedimento (mate) y agua de manglar del caño (más oscura).
+  const aguaMat = new THREE.MeshPhysicalMaterial({ color: "#5a4628", roughness: 0.42, metalness: 0.0, clearcoat: 0.15 });
+  const canoMat = new THREE.MeshPhysicalMaterial({ color: "#3d3a22", roughness: 0.3, metalness: 0.0, clearcoat: 0.3 });
   const canalGeo = new THREE.PlaneGeometry(largoCanal + 1, 2 * mediaBorde, 160, 14);
   canalGeo.rotateX(-Math.PI / 2);
   canalGeo.translate((xIni + xFin) / 2, 0, 0);
@@ -272,20 +305,27 @@ export function construirEscena(renderer) {
   const canoGeo = new THREE.PlaneGeometry(160, 120, 60, 40);
   canoGeo.rotateX(-Math.PI / 2);
   canoGeo.translate(xFin + 80, 0, 0);
-  const aguaCano = new THREE.Mesh(canoGeo, aguaMat);
+  const aguaCano = new THREE.Mesh(canoGeo, canoMat);
   scene.add(aguaCanal, aguaCano);
   const base = [canalGeo, canoGeo].map((g) => Float32Array.from(g.attributes.position.array));
 
+  // Las olas del canal avanzan a la velocidad del agua (fase = k·x − k·v·t).
+  const ola = { t: 0, v: 0, amp: 0.05 };
+  const alturaOla = (x, z) => ola.amp * (Math.sin(0.9 * (x - ola.v * ola.t)) * 0.6 + Math.sin(x * 0.37 + z * 1.3 - ola.t * 1.3) * 0.4);
   const agua = {
     y: fondoY + 0.15,
-    setNivel(m) { this.y = fondoY + m; },
+    yCano: fondoY + 0.6,
+    /** nivel del arroyo (m sobre el fondo) y del caño, que lo controla el Magdalena */
+    setNivel(m, mCano = 0.6) { this.y = fondoY + m; this.yCano = fondoY + Math.max(mCano, Math.min(m, mCano)); },
+    alturaEn(x, z) { return (x < xFin ? this.y : this.yCano) + (x < xFin ? alturaOla(x, z) : 0); },
     animar(t, velFlujo, lluvia) {
+      ola.t = t; ola.v = velFlujo; ola.amp = 0.04 + 0.03 * Math.min(2, velFlujo) + 0.02 * lluvia;
       [canalGeo, canoGeo].forEach((g, k) => {
         const p = g.attributes.position.array, b = base[k];
-        const amp = (k === 0 ? 0.05 + 0.04 * velFlujo : 0.04) + 0.02 * lluvia;
+        const y0 = k === 0 ? this.y : this.yCano;
         for (let i = 0; i < p.length; i += 3) {
           const x = b[i], z = b[i + 2];
-          p[i + 1] = this.y + amp * (Math.sin(x * 0.9 - t * (2 + velFlujo * 2)) * 0.6 + Math.sin(x * 0.37 + z * 1.3 - t * 1.3) * 0.4);
+          p[i + 1] = y0 + (k === 0 ? alturaOla(x, z) : 0.03 * Math.sin(x * 0.3 + z * 0.2 - t * 0.6));
         }
         g.attributes.position.needsUpdate = true;
         g.computeVertexNormals();
@@ -294,7 +334,7 @@ export function construirEscena(renderer) {
   };
 
   // ---- Lluvia ----
-  const N_GOTAS = 6000;
+  const N_GOTAS = baja ? 2500 : 6000;
   const gotasGeo = new THREE.BufferGeometry();
   const gp = new Float32Array(N_GOTAS * 6);
   for (let i = 0; i < N_GOTAS; i++) {
@@ -312,7 +352,7 @@ export function construirEscena(renderer) {
       const p = gotasGeo.attributes.position.array;
       for (let i = 0; i < visibles; i++) {
         const k = i * 6;
-        p[k + 1] -= 14 * dtReal; p[k + 4] -= 14 * dtReal;
+        p[k + 1] -= 9 * dtReal; p[k + 4] -= 9 * dtReal; // velocidad terminal de una gota: ~9 m/s
         if (p[k + 4] < agua.y) { const y = 27 + Math.random() * 3; p[k + 1] = y; p[k + 4] = y - 0.55; }
       }
       gotasGeo.attributes.position.needsUpdate = true;
@@ -365,7 +405,7 @@ export function construirEscena(renderer) {
     radar.position.set(0, 2.78, 1.85);
     const caja = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, 0.18), new THREE.MeshStandardMaterial({ color: "#dcdcdc", roughness: 0.6 }));
     caja.position.set(0, 2.1, 0.12);
-    const panel = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.03, 0.4), new THREE.MeshStandardMaterial({ map: texPanel(), roughness: 0.3, metalness: 0.4 }));
+    const panel = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.03, 0.4), unaVez("matPanelOjo", () => new THREE.MeshStandardMaterial({ map: unaVez("panel", texPanel), roughness: 0.3, metalness: 0.4 })));
     panel.position.set(0, 3.25, 0); panel.rotation.x = 0.35;
     const luz = new THREE.Mesh(new THREE.SphereGeometry(0.11, 16, 8), new THREE.MeshStandardMaterial({ color: "#111", emissive: "#00ff40", emissiveIntensity: 2 }));
     luz.position.set(0, 3.45, 0);
@@ -378,6 +418,41 @@ export function construirEscena(renderer) {
     scene.add(g);
     ojos.push({ grupo: g, luz, etiqueta: l });
   });
+
+  // ---- Escala humana: vecinos, una señal de peligro y un carro ----
+  const ropa = ["#2b5fab", "#c23b3b", "#f2c14e", "#3e8e5a", "#7a4ea3", "#e07b39"];
+  const piel = ["#8d5a3b", "#c48a62", "#6b3f26", "#e0b48f"];
+  const persona = (x, z, i) => {
+    const g = new THREE.Group();
+    const cuerpo = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, 0.9, 4, 8), new THREE.MeshStandardMaterial({ color: ropa[i % ropa.length], roughness: 0.8 }));
+    cuerpo.position.y = 0.75;
+    const cabeza = new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 8), new THREE.MeshStandardMaterial({ color: piel[i % piel.length], roughness: 0.7 }));
+    cabeza.position.y = 1.58;
+    for (const m of [cuerpo, cabeza]) { m.castShadow = !baja; g.add(m); }
+    g.position.set(x, 0.25, z);
+    scene.add(g);
+  };
+  [[-60, 6.6], [-58, 6.9], [-49, 3.5], [-47, -3.2], [-20, -6.8], [-6, 6.8], [4, 7.1], [16, -6.7], [-35, 6.7]].forEach(([x, z], i) => persona(x, z, i));
+  const senal = new THREE.Group();
+  const posteS = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 2.4, 8), gris);
+  posteS.position.y = 1.2;
+  const placa = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.75), new THREE.MeshBasicMaterial({ map: lienzo(256, 176, (g, w, h) => {
+    g.fillStyle = "#f2c200"; g.fillRect(0, 0, w, h); g.strokeStyle = "#111"; g.lineWidth = 10; g.strokeRect(6, 6, w - 12, h - 12);
+    g.fillStyle = "#111"; g.font = "bold 46px Helvetica, Arial"; g.textAlign = "center"; g.fillText("PELIGRO", w / 2, 74); g.font = "bold 34px Helvetica, Arial"; g.fillText("ARROYO", w / 2, 128);
+  }), side: THREE.DoubleSide }));
+  placa.position.y = 2.2;
+  placa.rotation.y = Math.PI / 2;
+  senal.add(posteS, placa);
+  senal.position.set(-66, 0, -(mediaBorde + 1.2));
+  scene.add(senal);
+  const carro = new THREE.Group();
+  const chasis = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.9, 1.8), new THREE.MeshStandardMaterial({ color: "#c9302c", roughness: 0.4, metalness: 0.3 }));
+  chasis.position.y = 0.75;
+  const cabina = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.7, 1.6), new THREE.MeshStandardMaterial({ color: "#2a3440", roughness: 0.2 }));
+  cabina.position.set(-0.2, 1.5, 0);
+  for (const m of [chasis, cabina]) { m.castShadow = !baja; carro.add(m); }
+  carro.position.set(-28, 0, 11);
+  scene.add(carro);
 
   // ---- La estación: el caimán ----
   const est = construirCaiman();
@@ -426,7 +501,7 @@ function construirCaiman() {
     grupo.add(p);
   }
   // Lomo solar
-  const panelMat = new THREE.MeshStandardMaterial({ map: texPanel(), roughness: 0.25, metalness: 0.5 });
+  const panelMat = new THREE.MeshStandardMaterial({ map: unaVez("panel", texPanel), roughness: 0.25, metalness: 0.5 });
   for (let i = 0; i < 5; i++) {
     const p = new THREE.Mesh(new THREE.BoxGeometry(1.25, 0.05, 1.7), panelMat);
     p.position.set(-1.2 + i * 1.45, 1.62, 0);
@@ -534,9 +609,9 @@ function construirCaiman() {
   panza.add(caja, relleno);
 
   const etiquetas = [
-    ["Rampa + banda (servo D9 · motor D3)", cabeza, new THREE.Vector3(-2.5, 1.3, 0)],
+    ["Boca: rampa + banda (servo D9 · motor D3)", cabeza, new THREE.Vector3(-2.5, 1.3, 0)],
     ["Barrera IR · D2", cabeza, new THREE.Vector3(-0.45, 0.9, 1.4)],
-    ["Ojos RGB · D5/D6/D11", craneoPiv, new THREE.Vector3(-1.1, 1.6, 0)],
+    ["Luces de los ojos (RGB) · D5/D6/D11", craneoPiv, new THREE.Vector3(-1.1, 1.6, 0)],
     ["Rugido · D8", craneoPiv, new THREE.Vector3(-0.3, 1.5, -0.6)],
     ["Panza (contenedor)", panza, new THREE.Vector3(0, 1.2, 0)],
     ["Lomo solar", grupo, new THREE.Vector3(3, 2.1, 0)],

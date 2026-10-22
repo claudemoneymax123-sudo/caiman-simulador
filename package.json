@@ -13,7 +13,7 @@
     "demo:sin-placa": "node hardware/run.js --sin-placa --rapido 20",
     "calibrar": "node hardware/calibrar.js",
     "test": "node --test --test-force-exit test/run-node.js test/johnny-five-real.test.js",
-    "sim": "npx --yes http-server@14.1.1 -p 8766 -c-1 ."
+    "sim": "python3 -m http.server 8766"
   },
   "dependencies": {
     "firmata-io": "^2.3.0",
