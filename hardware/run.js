@@ -14,9 +14,9 @@
 // Requiere Node.js 20.14 o más nuevo y StandardFirmata cargado en el Uno.
 
 import { crearEstacion } from "../src/estacion.js";
-import { crearCerebro } from "../src/cerebro.js";
-import { crearAguacero, crearFuenteDemo, OJO_CAIMAN } from "../src/aguacero.js";
-import { CONFIG, UMBRALES } from "../src/config.js";
+import { OJO_CAIMAN } from "../src/aguacero.js";
+import { crearDemo, mmss } from "../src/demo.js";
+import { CONFIG } from "../src/config.js";
 
 const args = process.argv.slice(2);
 const opcion = (n) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : undefined; };
@@ -131,27 +131,25 @@ function consultarServidor(est) {
 }
 
 // ---- Feria: aguacero simulado en el portátil, sin internet -------------------------
+// La misma demo que usa el simulador (src/demo.js).
 function demoAguacero(est) {
-  let ag, fuente, t0;
-  const empezar = () => {
-    ag = crearAguacero();
-    fuente = crearFuenteDemo({ aguacero: ag, cerebro: crearCerebro(UMBRALES), umbrales: UMBRALES });
-    t0 = Date.now();
-    console.log(`Aguacero de demostración: 30 min de lluvia + 30 de bajada${rapido > 1 ? ` a ×${rapido} (${(3600 / rapido).toFixed(0)} s)` : ""}`);
-  };
-  empezar();
-  let ultimoResumen = -Infinity;
-  const mmss = (s) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+  const demo = crearDemo({ cadaS: 0 }); // consulta en cada vuelta del intervalo
+  let t0 = Date.now(), ultimoResumen = -Infinity;
+  const anunciar = () => console.log(`Aguacero de demostración: 30 min de lluvia + 30 de bajada${rapido > 1 ? ` a ×${rapido} (${(demo.totalS / rapido).toFixed(0)} s)` : ""}`);
+  anunciar();
   const coma = (v, d = 1) => v.toFixed(d).replace(".", ",");
   setInterval(() => {
     const tS = ((Date.now() - t0) / 1000) * rapido;
-    if (tS > 3600) { console.log("Fin de la demostración (30 min de lluvia y 30 de bajada). Empieza otro aguacero."); ultimoResumen = -Infinity; empezar(); return; }
-    const a = fuente.actualizar(tS);
-    if (!a.sinDatos) est.setAlerta(a.nivel, a.motivo);
+    if (tS > demo.totalS) {
+      console.log("Fin de la demostración (30 min de lluvia y 30 de bajada). Empieza otro aguacero.");
+      demo.reiniciar(); t0 = Date.now(); ultimoResumen = -Infinity; anunciar();
+      return;
+    }
+    const a = demo.tick(tS, est);
     if (tS - ultimoResumen >= 30) {
       ultimoResumen = tS;
       const st = est.status();
-      console.log(`[aguacero ${mmss(tS)}] lluvia ${coma(ag.lluviaMmMin(tS))} mm/min · nivel ${ag.nivelCm(OJO_CAIMAN, tS).toFixed(0)} cm · alerta ${a.nivel} · ${st.modo} · ${st.objetos} objetos`);
+      console.log(`[aguacero ${mmss(tS)}] lluvia ${coma(demo.ag.lluviaMmMin(tS))} mm/min · nivel ${demo.ag.nivelCm(OJO_CAIMAN, tS).toFixed(0)} cm · alerta ${a.nivel} · ${st.modo} · ${st.objetos} objetos`);
     }
   }, Math.max(250, 5000 / rapido));
 }

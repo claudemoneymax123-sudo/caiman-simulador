@@ -84,7 +84,7 @@
 
   <footer>
     <p>Cómo se decidió: se aprobó lo que tenía evidencia en el código, alto impacto y no rompía la regla central del proyecto (el mismo <code>src/estacion.js</code> corre en la maqueta y en el simulador). Lo que necesita datos de campo de la Fase 1 quedó "para la Fase 1". Se rechazó lo que contradecía la especificación del proyecto, inventaba valores sin medir o no tenía efecto medible. Ningún umbral de alerta se fijó como definitivo.</p>
-    <p>Pruebas al cierre del veredicto: 33 en Node (incluida una con el Johnny-Five real contra un Arduino Uno emulado byte a byte) y 32 en el navegador, todas aprobadas.</p>
+    <p>Pruebas: 38 en Node (incluida una con el Johnny-Five real contra un Arduino Uno emulado byte a byte) y 37 en el navegador, todas aprobadas. Actualizado con los pendientes de software aplicados después del veredicto.</p>
   </footer>
 </main>
 
@@ -201,7 +201,7 @@ const D = [
   [6, "Escalado", "EMPEORA", "Los tiempos de la maqueta no están escalados a la escena real.", "despues", "Escalar las entradas de la barrera, no el reloj del controlador."],
   [6, "Escalado", "EMPEORA", "Las masas mezclan escala real y de maqueta.", "despues", "Declarar la escala de cada número en la configuración."],
 
-  [7, "Render", "EMPEORA", "Unas 1.700 llamadas de dibujo por cuadro (objeto por objeto).", "despues", "InstancedMesh para postes, boyas, dientes y manglar en la siguiente versión."],
+  [7, "Render", "EMPEORA", "Unas 1.700 llamadas de dibujo por cuadro (objeto por objeto).", "aplicado", "InstancedMesh para postes de baranda, boyas, escudos, dientes y manglar. Medido con la vista a 880 × 800 px: de 802 a 473 llamadas a WebGL por cuadro (−41 %), con la misma basura y el mismo resultado."],
   [7, "Render", "EMPEORA", "Las olas se calculan en la CPU en cada cuadro.", "despues", "Olas en el shader en la siguiente versión."],
   [7, "Render", "EMPEORA", "Agua transparente sin necesidad.", "aplicado", "Agua opaca."],
   [7, "Agua y clima", "EMPEORA", "Las olas iban 11 veces más rápido que la corriente.", "aplicado", "Las olas avanzan a la velocidad del agua."],
@@ -225,7 +225,7 @@ const D = [
   [8, "Accesibilidad", "EMPEORA", "Sin doctype ni lang=\"es\": modo de compatibilidad y lectura con voz inglesa.", "aplicado", "Restaurados. Verificado: modo estándar."],
   [8, "Accesibilidad", "EMPEORA", "Los cambios de alerta no se anuncian.", "aplicado", "Región aria-live (cortés) que anuncia solo las subidas."],
   [8, "Accesibilidad", "EMPEORA", "Contraste insuficiente en bordes de botones y texto pequeño del banner.", "aplicado", "Borde #6b7380 y texto sin opacidad."],
-  [8, "Accesibilidad", "EMPEORA", "Verde y rojo se confunden con daltonismo.", "parcial", "El nivel se escribe en las etiquetas y la lista. El patrón en la franja de la gráfica queda para después."],
+  [8, "Accesibilidad", "EMPEORA", "Verde y rojo se confunden con daltonismo.", "aplicado", "El nivel se escribe en las etiquetas y la lista, y la franja de la gráfica lleva un patrón por alerta (liso, rayas, puntos, cuadrícula), igual en la leyenda."],
   [8, "Accesibilidad", "EMPEORA", "Botones de alternar sin estado y sin reducir movimiento.", "aplicado", "aria-pressed y prefers-reduced-motion."],
   [8, "Móvil", "EMPEORA", "La vista 3D atrapa el dedo en el celular.", "parcial", "Vista más baja. Desactivar el giro se rechazó: girar el caimán es el momento central de la feria."],
   [8, "Móvil", "EMPEORA", "El aviso de caída de tensión podía quedar sin salida.", "aplicado", "La capa se desplaza."],
@@ -259,8 +259,8 @@ const D = [
   [9, "Corrector de estilo", "EMPEORA", "Reloj \"/ 30:00\" en una demo de 60 min.", "aplicado", "\"Lluvia\" y \"Bajada\"."],
   [9, "Debate", "—", "Modo feria (?feria=1) que oculte lo técnico.", "rechazado", "Lo técnico ya va plegado en \"avanzado\"."],
 
-  [10, "Arquitecto", "EMPEORA", "La física de la basura depende de la escena 3D y no tiene pruebas.", "despues", "Separar sim/rio.js con pruebas; ahora hay CI, así que es seguro hacerlo."],
-  [10, "Arquitecto", "EMPEORA", "Lógica de la demo duplicada en el simulador y en run.js.", "despues", "src/demo.js en la siguiente versión."],
+  [10, "Arquitecto", "EMPEORA", "La física de la basura depende de la escena 3D y no tiene pruebas.", "aplicado", "Separada en sim/rio.js (sin Three.js), con pruebas: la basura llega a la panza, pasa por debajo con la boca arriba y el conteo se conserva."],
+  [10, "Arquitecto", "EMPEORA", "Lógica de la demo duplicada en el simulador y en run.js.", "aplicado", "src/demo.js, usado por los dos, con pruebas de su cadencia y de la secuencia de alertas."],
   [10, "Arquitecto", "EMPEORA", "Velocidad del agua y \"ojo 5\" repetidos.", "aplicado", "velocidadFlujo() y OJO_CAIMAN."],
   [10, "Arquitecto", "EMPEORA", "El prototipo anterior está al lado y puede confundir.", "despues", "Decisión del equipo: archivarlo o borrarlo."],
   [10, "Calidad de código", "EMPEORA", "Código muerto.", "aplicado", "Eliminado."],

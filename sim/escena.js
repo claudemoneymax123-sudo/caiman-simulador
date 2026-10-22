@@ -7,12 +7,30 @@ import * as THREE from "three";
 import { mergeVertices } from "three/addons/utils/BufferGeometryUtils.js";
 import { Sky } from "three/addons/objects/Sky.js";
 import { CSS2DObject } from "three/addons/renderers/CSS2DRenderer.js";
+import { CANAL, RAMPA, geometriaBarreras } from "./rio.js";
 
 const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const lerp = (a, b, t) => a + (b - a) * t;
 
-export const CANAL = { fondoY: -3.2, mediaFondo: 3, mediaBorde: 5.5, xIni: -75, xFin: 25 };
-export const RAMPA = { largo: 5, ancho: 2.6, bisagraX: -3 };
+// La geometría del canal, la rampa y las barreras vive en rio.js: la misma para la física y el dibujo.
+export { CANAL, RAMPA };
+
+// Muchas copias de la misma pieza en UNA llamada de dibujo (InstancedMesh).
+// `colocar(o, i)` ubica la copia i con position/rotation/scale de un Object3D auxiliar.
+function instancias(geo, material, n, colocar, { sombra = true } = {}) {
+  const im = new THREE.InstancedMesh(geo, material, n);
+  const o = new THREE.Object3D();
+  for (let i = 0; i < n; i++) {
+    o.position.set(0, 0, 0); o.rotation.set(0, 0, 0); o.scale.set(1, 1, 1);
+    colocar(o, i);
+    o.updateMatrix();
+    im.setMatrixAt(i, o.matrix);
+  }
+  im.instanceMatrix.needsUpdate = true;
+  im.computeBoundingSphere();
+  im.castShadow = sombra;
+  return im;
+}
 
 // ---- Texturas procedurales ----------------------------------------------------
 function lienzo(w, h, pintar) {
@@ -195,6 +213,8 @@ export function construirEscena(renderer, opts = {}) {
   // Calles y andenes a ambos lados
   const asfalto = new THREE.MeshStandardMaterial({ map: texAsfalto(), roughness: 0.95 });
   asfalto.map.repeat.set(30, 4);
+  const barandaMat = new THREE.MeshStandardMaterial({ color: "#2e5d3a", metalness: 0.6, roughness: 0.5 });
+  const postes = [];
   for (const s of [-1, 1]) {
     const calle = new THREE.Mesh(new THREE.PlaneGeometry(largoCanal + 40, 14), asfalto);
     calle.rotation.x = -Math.PI / 2;
@@ -204,15 +224,12 @@ export function construirEscena(renderer, opts = {}) {
     anden.position.set((xIni + xFin) / 2 - 20, 0.12, s * (mediaBorde + 0.7));
     anden.receiveShadow = anden.castShadow = true;
     // Baranda metálica del canal
-    const baranda = new THREE.Mesh(new THREE.BoxGeometry(largoCanal, 0.06, 0.06), new THREE.MeshStandardMaterial({ color: "#2e5d3a", metalness: 0.6, roughness: 0.5 }));
+    const baranda = new THREE.Mesh(new THREE.BoxGeometry(largoCanal, 0.06, 0.06), barandaMat);
     baranda.position.set((xIni + xFin) / 2, 1.05, s * (mediaBorde + 0.2));
     scene.add(calle, anden, baranda);
-    for (let x = xIni; x <= xFin; x += 2.5) {
-      const p = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.05, 0.06), baranda.material);
-      p.position.set(x, 0.52, s * (mediaBorde + 0.2));
-      scene.add(p);
-    }
+    for (let x = xIni; x <= xFin; x += 2.5) postes.push([x, s * (mediaBorde + 0.2)]);
   }
+  scene.add(instancias(new THREE.BoxGeometry(0.06, 1.05, 0.06), barandaMat, postes.length, (o, i) => o.position.set(postes[i][0], 0.52, postes[i][1]), { sombra: false }));
 
   // Puente de la carrera (aguas arriba)
   const puente = new THREE.Mesh(new THREE.BoxGeometry(9, 0.8, 2 * mediaBorde + 8), concreto);
@@ -285,13 +302,11 @@ export function construirEscena(renderer, opts = {}) {
 
   // Caño de la Auyama: agua ancha con manglar
   const manglar = new THREE.MeshStandardMaterial({ color: "#2f5a2a", roughness: 0.85 });
-  for (let i = 0; i < 70; i++) {
-    const lado = rnd() < 0.5 ? -1 : 1;
-    const m = new THREE.Mesh(new THREE.IcosahedronGeometry(2 + rnd() * 3, 1), manglar);
-    m.position.set(xFin + 8 + rnd() * 120, fondoY + 1.4 + rnd() * 1.2, lado * (23 + rnd() * 30));
-    m.scale.y = 0.6;
-    scene.add(m);
-  }
+  scene.add(instancias(new THREE.IcosahedronGeometry(1, 1), manglar, 70, (o) => {
+    const lado = rnd() < 0.5 ? -1 : 1, r = 2 + rnd() * 3;
+    o.position.set(xFin + 8 + rnd() * 120, fondoY + 1.4 + rnd() * 1.2, lado * (23 + rnd() * 30));
+    o.scale.set(r, r * 0.6, r);
+  }, { sombra: false }));
 
   // ---- Agua (sube y baja con el nivel; olas animadas) ----
   // Agua de arroyo cargada de sedimento (mate) y agua de manglar del caño (más oscura).
@@ -371,25 +386,20 @@ export function construirEscena(renderer, opts = {}) {
   const boyaMats = ["#f2a516", "#e8e2d0"].map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.5 }));
   const barreras = new THREE.Group();
   scene.add(barreras);
-  const puntaX = RAMPA.bisagraX - RAMPA.largo * Math.cos((25 * Math.PI) / 180);
-  const barrera = (lado) => {
-    const a = new THREE.Vector3(-24, 0, lado * 4.9), b = new THREE.Vector3(puntaX - 0.2, 0, lado * 1.35);
-    const n = 26;
-    for (let i = 0; i < n; i++) {
-      const p = a.clone().lerp(b, (i + 0.5) / n);
-      const boya = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, (a.distanceTo(b) / n) * 0.92, 12), boyaMats[i % 2]);
-      boya.rotation.z = Math.PI / 2;
-      boya.rotation.y = -Math.atan2(b.z - a.z, b.x - a.x);
-      boya.position.copy(p);
-      boya.castShadow = true;
-      barreras.add(boya);
-    }
-  };
-  barrera(-1); barrera(1);
-  const barreraZ = (x) => { // ancho libre entre barreras en x (para la física de la basura)
-    if (x < -24 || x > puntaX) return null;
-    return lerp(4.9, 1.35, (x + 24) / (puntaX + 24));
-  };
+  const { puntaX, desde, hasta, barreraZ } = geometriaBarreras(RAMPA);
+  const N_BOYAS = 26; // por barrera
+  const largoBarrera = Math.hypot(hasta.x - desde.x, hasta.z - desde.z);
+  const boyaGeo = new THREE.CylinderGeometry(0.17, 0.17, (largoBarrera / N_BOYAS) * 0.92, 12);
+  boyaMats.forEach((m, color) => {
+    // Boyas alternadas: este color ocupa las posiciones pares (o impares) de las dos barreras.
+    const lista = [];
+    for (const lado of [-1, 1]) for (let i = color; i < N_BOYAS; i += 2) lista.push([lado, i]);
+    barreras.add(instancias(boyaGeo, m, lista.length, (o, k) => {
+      const [lado, i] = lista[k], f = (i + 0.5) / N_BOYAS;
+      o.position.set(lerp(desde.x, hasta.x, f), 0, lado * lerp(desde.z, hasta.z, f));
+      o.rotation.set(0, -Math.atan2(lado * (hasta.z - desde.z), hasta.x - desde.x), Math.PI / 2);
+    }));
+  });
 
   // ---- Los 5 ojos (postes con radar sobre el canal) ----
   const ojos = [];
@@ -480,18 +490,18 @@ function construirCaiman() {
   cola.castShadow = true;
   grupo.add(cola);
   // Escudos (osteodermos) en dos filas sobre el lomo y la cola
-  const escudo = new THREE.ConeGeometry(0.18, 0.35, 4);
+  const escudos = [];
   for (let x = -2.4; x < 15; x += 0.6) {
     for (const z of x < 8 ? [-1.05, 1.05] : [-0.25, 0.25]) {
       const k = x < 8 ? 1 : 1 - (x - 8) / 9;
-      const e = new THREE.Mesh(escudo, piel);
       const y = x < 8 ? 1.42 : 0.95 * k + 0.15;
-      e.position.set(x, y, z * (x < 8 ? 1 : k + 0.3) + (x > 8 ? Math.sin(((x - 8) / 8) * 2.4) * 0.6 * ((x - 8) / 8) : 0));
-      e.scale.setScalar(k);
-      e.castShadow = true;
-      grupo.add(e);
+      escudos.push([x, y, z * (x < 8 ? 1 : k + 0.3) + (x > 8 ? Math.sin(((x - 8) / 8) * 2.4) * 0.6 * ((x - 8) / 8) : 0), k]);
     }
   }
+  grupo.add(instancias(new THREE.ConeGeometry(0.18, 0.35, 4), piel, escudos.length, (o, i) => {
+    const [x, y, z, k] = escudos[i];
+    o.position.set(x, y, z); o.scale.setScalar(k);
+  }));
   // Patas (flotadores estabilizadores)
   for (const [x, z] of [[-1, -1.9], [-1, 1.9], [5.5, -1.7], [5.5, 1.7]]) {
     const p = new THREE.Mesh(new THREE.CapsuleGeometry(0.35, 1.2, 6, 12), piel);
@@ -532,13 +542,9 @@ function construirCaiman() {
   cabeza.add(banda);
   // Rejilla = dientes de la mandíbula inferior (peine que deja pasar el agua)
   const dienteMat = new THREE.MeshStandardMaterial({ color: "#e8e1c8", roughness: 0.4 });
-  for (let x = -L + 0.25; x < -0.3; x += 0.32) {
-    for (const z of [-A / 2, A / 2]) {
-      const d = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.32, 6), dienteMat);
-      d.position.set(x, 0.45, z);
-      cabeza.add(d);
-    }
-  }
+  const dientesRampa = [];
+  for (let x = -L + 0.25; x < -0.3; x += 0.32) for (const z of [-A / 2, A / 2]) dientesRampa.push([x, z]);
+  cabeza.add(instancias(new THREE.ConeGeometry(0.06, 0.32, 6), dienteMat, dientesRampa.length, (o, i) => o.position.set(dientesRampa[i][0], 0.45, dientesRampa[i][1]), { sombra: false }));
   // Barrera infrarroja (contador) al final de la banda
   const hazMat = new THREE.MeshBasicMaterial({ color: "#ff2020", transparent: true, opacity: 0.8 });
   const haz = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, A, 6), hazMat);
@@ -564,15 +570,17 @@ function construirCaiman() {
   craneo.rotation.y = Math.PI; // apunta aguas arriba (−X)
   craneo.castShadow = true;
   craneoPiv.add(craneo);
+  const dientesCraneo = [];
   for (let x = 0.6; x < 5.2; x += 0.34) {
     for (const z of [-1, 1]) {
       const u = x / 5.6, hw = lerp(1.0, 1.55, 1 - smooth(0.05, 1, u)) * 0.92 * (1 - Math.pow(u, 6) * 0.5);
-      const d = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.38, 6), dienteMat);
-      d.rotation.x = Math.PI;
-      d.position.set(-x, -0.22, z * hw);
-      craneoPiv.add(d);
+      dientesCraneo.push([-x, z * hw]);
     }
   }
+  craneoPiv.add(instancias(new THREE.ConeGeometry(0.07, 0.38, 6), dienteMat, dientesCraneo.length, (o, i) => {
+    o.rotation.x = Math.PI;
+    o.position.set(dientesCraneo[i][0], -0.22, dientesCraneo[i][1]);
+  }, { sombra: false }));
   // Ojos = tira LED RGB detrás de domos
   const ojos = [];
   for (const z of [-0.8, 0.8]) {

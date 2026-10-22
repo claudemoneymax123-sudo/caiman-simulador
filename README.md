@@ -162,10 +162,10 @@ Luego abra <http://localhost:8766/simulador.html>. Con `?calidad=baja` en la dir
 
 ## Pruebas
 
-- **En Node:** `npm test` corre 33 pruebas. GitHub Actions las corre en cada cambio con Node 20, 22 y 24.
-  - 32 cubren el cerebro, el aguacero, la estación sobre el hardware virtual, las fallas y un aguacero completo de punta a punta.
+- **En Node:** `npm test` corre 38 pruebas. GitHub Actions las corre en cada cambio con Node 20, 22 y 24.
+  - 37 cubren el cerebro, el aguacero, la demo compartida, el río y la basura, la estación sobre el hardware virtual, las fallas y un aguacero completo de punta a punta.
   - 1 es de integración: el **johnny-five real** + `firmata-io` real + `src/estacion.js`, contra un Arduino Uno con StandardFirmata emulado byte a byte (`test/uno-firmata.js`). Comprueba los modos de cada pin, el PWM de la banda con arranque suave, el pulso del servo en µs, el pull-up de la barrera IR, el conteo de objetos, el atasco con el reloj real, la boca abierta y el rugido en ROJO, y el apagado seguro.
-- **En el navegador:** <http://localhost:8766/test/index.html> corre las 32 pruebas del hardware virtual.
+- **En el navegador:** <http://localhost:8766/test/index.html> corre las 37 pruebas del hardware virtual.
 
 ## Qué falta o difiere de la especificación
 
@@ -181,12 +181,14 @@ src/config.js          pines, calibración y umbrales provisionales
 src/estacion.js        el controlador: corre en la maqueta y en el simulador
 src/cerebro.js         reglas de alerta VERDE/AMARILLO/NARANJA/ROJO
 src/aguacero.js        aguacero de demostración + envío simulado de los ojos
+src/demo.js            la demo del aguacero, compartida por el simulador y hardware/run.js
 hardware/run.js        maqueta real: --servidor, demo, --rapido, --sin-placa
 hardware/conectar.js   busca el Arduino y abre el puerto (serialport@13 + firmata-io)
 hardware/calibrar.js   REPL para calibrar rampa, banda, ojos, rugido e IR
 sim/virtual-five.js    Uno, MG996R, motor DC, tira RGB, buzzer e IR virtuales
-sim/escena.js          modelo 3D: canal, caño, barreras, ojos, caimán
-sim/main.js            bucle de simulación, física de la basura, interfaz
+sim/rio.js             física de la basura y geometría del canal, la rampa y las barreras (sin Three.js, probada en Node)
+sim/escena.js          modelo 3D: canal, caño, barreras, ojos, caimán (piezas repetidas en InstancedMesh)
+sim/main.js            une la demo, el río, la estación y la escena; interfaz
 simulador.html         página del simulador
 test/                  pruebas (Node y navegador) y el Uno emulado (uno-firmata.js)
 vendor/three@0.160.0/  Three.js dentro del proyecto (funciona sin internet)

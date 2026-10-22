@@ -61,6 +61,13 @@
   canvas#grafica { width: 100%; height: 190px; display: block; background: #0f1114; border-radius: 6px; }
   .leyenda { display: flex; gap: 10px; font-size: 11px; color: var(--muted); margin-top: 6px; flex-wrap: wrap; align-items: center; }
   .leyenda i { display: inline-block; width: 10px; height: 10px; margin-right: 4px; vertical-align: -1px; border-radius: 2px; }
+  /* Patrones de la franja de alerta (iguales a los de la gráfica): no depender solo del color. */
+  .leyenda i.pv { background: var(--verde); }
+  .leyenda i.pa { background: repeating-linear-gradient(135deg, var(--amarillo) 0 3px, rgba(0,0,0,.55) 3px 4.5px); }
+  .leyenda i.pn { background: radial-gradient(circle, rgba(0,0,0,.55) 1.6px, transparent 2px) 0 0 / 8px 8px, var(--naranja); }
+  .leyenda i.pr { background: linear-gradient(rgba(0,0,0,.55) 0 0) 50% 0 / 1.5px 100% no-repeat, linear-gradient(rgba(0,0,0,.55) 0 0) 0 50% / 100% 1.5px no-repeat, var(--rojo); }
+  .leyenda i.ps { background: repeating-linear-gradient(0deg, var(--azul) 0 3px, rgba(0,0,0,.55) 3px 4.5px); }
+  .leyenda i.pv, .leyenda i.pa, .leyenda i.pn, .leyenda i.pr, .leyenda i.ps { width: 14px; height: 12px; }
   .ojos-lista div { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 4px 0; border-bottom: 1px solid var(--line); font-size: 12px; }
   .ojos-lista div:last-child { border: none; }
   .punto { width: 12px; height: 12px; border-radius: 50%; background: var(--verde); border: 2px solid transparent; }
@@ -182,7 +189,7 @@
         <span>línea = ojo (número en su pico)</span>
         <span><i style="background:#ff3b3b"></i>100 % = nivel de peligro</span>
         <span><i style="background:#5b7fa6"></i>lluvia</span>
-        <span>franja: <i style="background:var(--verde)"></i>V <i style="background:var(--amarillo)"></i>A <i style="background:var(--naranja)"></i>N <i style="background:var(--rojo)"></i>R <i style="background:var(--azul)"></i>sin datos</span>
+        <span>franja (color y patrón): <i class="pv"></i>verde <i class="pa"></i>amarilla <i class="pn"></i>naranja <i class="pr"></i>roja <i class="ps"></i>sin datos</span>
         <span>lo que viene, atenuado</span>
       </div>
     </section>

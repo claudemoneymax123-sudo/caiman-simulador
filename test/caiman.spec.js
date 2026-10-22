@@ -5,7 +5,9 @@ import { crearEstacion, MODOS } from "../src/estacion.js";
 import { crearCerebro, NIVELES } from "../src/cerebro.js";
 import { crearAguacero, crearFuenteDemo, OJOS_DEMO, velocidadFlujo } from "../src/aguacero.js";
 import { CONFIG, UMBRALES } from "../src/config.js";
-import { VirtualWorld, createVirtualFive } from "../sim/virtual-five.js";
+import { VirtualWorld, createVirtualFive, mulberry32 } from "../sim/virtual-five.js";
+import { crearRio, CANAL } from "../sim/rio.js";
+import { crearDemo, mmss } from "../src/demo.js";
 
 const C = CONFIG.compuerta, IR = CONFIG.pines.contadorIR, X = CONFIG.conexion;
 // La estación arranca con la boca abierta y la cierra a velCierreDegS; luego arranca la banda.
@@ -346,6 +348,75 @@ export const tests = [
     let fallo = false;
     try { new five.Led.RGB({ pins: { red: 5, green: 7, blue: 11 } }); } catch { fallo = true; }
     assert(fallo, "debió fallar con D7");
+  }],
+
+  // ---- Río y basura (sim/rio.js, física pura) --------------------------------------
+  ["río: con la rampa sumergida y la banda andando, la basura llega a la panza", () => {
+    const rio = crearRio({ rng: mulberry32(1) });
+    const nivelM = 0.6, aguaY = CANAL.fondoY + nivelM, velFlujo = velocidadFlujo(nivelM);
+    for (let i = 0; i < 20; i++) rio.soltar(nivelM);
+    let tapado = false;
+    for (let t = 0; t < 120; t += 0.05) {
+      const r = rio.paso(0.05, { rampaDeg: C.cerradaDeg - 45, aguaY, vBanda: 0.4, velFlujo, nivelM, t });
+      if (r.hazTapado) tapado = true;
+      rio.tomarRemovidos();
+    }
+    const c = rio.cuenta;
+    assert(c.atrapadas > 0, `atrapadas ${c.atrapadas}, escapadas ${c.escapadas}`);
+    assert(tapado, "la basura en la banda nunca tapó el haz IR");
+    assert(Object.values(c.porTipo).reduce((a, b) => a + b, 0) === c.atrapadas, JSON.stringify(c.porTipo));
+    assert(rio.panzaKg > 0, `panza ${rio.panzaKg} kg`);
+  }],
+
+  ["río: con la boca levantada, la basura pasa por debajo", () => {
+    const rio = crearRio({ rng: mulberry32(2) });
+    const nivelM = 1.6, aguaY = CANAL.fondoY + nivelM, velFlujo = velocidadFlujo(nivelM);
+    for (let i = 0; i < 20; i++) rio.soltar(nivelM);
+    for (let t = 0; t < 120; t += 0.05) rio.paso(0.05, { rampaDeg: C.abiertaDeg - 45, aguaY, vBanda: 0, velFlujo, nivelM, t });
+    assert(rio.cuenta.atrapadas === 0, `atrapó ${rio.cuenta.atrapadas} con la boca arriba`);
+    assert(rio.cuenta.escapadas === 20, `escaparon ${rio.cuenta.escapadas} de 20`);
+  }],
+
+  ["río: el conteo se conserva (soltadas = atrapadas + escapadas + descartadas + en tránsito)", () => {
+    const rnd = mulberry32(3);
+    const rio = crearRio({ rng: rnd, maxBasura: 10, capacidadBoca: 8 });
+    const nivelM = 0.8, aguaY = CANAL.fondoY + nivelM, velFlujo = velocidadFlujo(nivelM);
+    for (let t = 0; t < 600; t += 0.05) {
+      if (rnd() < 0.02) rio.soltar(nivelM); // ~0,4 objetos por segundo
+      const fase = Math.floor(t / 40) % 3; // boca abajo con banda, boca abajo sin banda, boca arriba
+      rio.paso(0.05, { rampaDeg: (fase === 2 ? C.abiertaDeg : C.cerradaDeg) - 45, aguaY, vBanda: fase === 0 ? 0.4 : 0, velFlujo, nivelM, t });
+      const c = rio.cuenta;
+      const suma = c.atrapadas + c.escapadas + c.descartadas + rio.enTransito();
+      assert(c.soltadas === suma, `t=${t.toFixed(1)}: ${c.soltadas} soltadas ≠ ${suma} (${JSON.stringify(c)})`);
+    }
+    const c = rio.cuenta;
+    assert(c.atrapadas > 0 && c.escapadas > 0 && c.descartadas > 0, JSON.stringify(c));
+  }],
+
+  // ---- Demo compartida (src/demo.js) ------------------------------------------------
+  ["demo compartida: consulta cada 5 s y no renueva la alerta sin conexión o sin datos", () => {
+    const demo = crearDemo();
+    const llamadas = [];
+    const est = { setAlerta: (n) => llamadas.push(n) };
+    assert(demo.tick(0, est) !== null && llamadas.length === 1, "la primera consulta debe ser inmediata");
+    assert(demo.tick(2, est) === null && llamadas.length === 1, "consultó antes de 5 s");
+    assert(demo.tick(5, est) !== null && llamadas.length === 2, "no consultó a los 5 s");
+    demo.tick(10, est, { conectado: false });
+    assert(llamadas.length === 2, "renovó la alerta sin conexión");
+    for (const o of UMBRALES.ojos) demo.fuente.apagarOjo(o.id);
+    let a;
+    for (let t = 15; t <= 15 + UMBRALES.ojoSinDatosS + 60; t += 5) a = demo.tick(t, est);
+    const antes = llamadas.length;
+    demo.tick(1000, est);
+    assert(a.sinDatos && llamadas.length === antes, "renovó la alerta sin datos de ningún ojo");
+    assert(mmss(125) === "02:05", mmss(125));
+  }],
+
+  ["demo compartida: mantiene la secuencia VERDE → AMARILLO → NARANJA → ROJO → … → VERDE", () => {
+    const demo = crearDemo(), secuencia = [];
+    for (let t = 0; t < demo.totalS; t += 1) { const a = demo.tick(t, null); if (a && secuencia.at(-1) !== a.nivel) secuencia.push(a.nivel); }
+    const esperada = ["VERDE", "AMARILLO", "NARANJA", "ROJO", "NARANJA", "AMARILLO", "VERDE"];
+    assert(secuencia.join(">") === esperada.join(">"), secuencia.join(" > "));
   }],
 
   ["de punta a punta: 45 min de aguacero con cerebro y estación", () => {

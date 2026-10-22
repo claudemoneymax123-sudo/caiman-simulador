@@ -1,13 +1,17 @@
 // Simulador: aguacero -> ojos -> cerebro -> estación (código real) -> hardware virtual -> 3D.
+// La física de la basura vive en sim/rio.js y la demo del aguacero en src/demo.js;
+// este archivo solo los une con la escena 3D y la interfaz.
 
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { CSS2DRenderer } from "three/addons/renderers/CSS2DRenderer.js";
-import { construirEscena, RAMPA, CANAL } from "./escena.js";
+import { construirEscena } from "./escena.js";
+import { crearRio, rampaEnElMundo, RAMPA } from "./rio.js";
 import { VirtualWorld, createVirtualFive, mulberry32 } from "./virtual-five.js";
 import { crearEstacion } from "../src/estacion.js";
-import { crearCerebro, NIVELES } from "../src/cerebro.js";
-import { crearAguacero, crearFuenteDemo, OJOS_DEMO, OJO_CAIMAN, velocidadFlujo, nivelCanoM } from "../src/aguacero.js";
+import { NIVELES } from "../src/cerebro.js";
+import { OJOS_DEMO, OJO_CAIMAN, velocidadFlujo, nivelCanoM } from "../src/aguacero.js";
+import { crearDemo, mmss } from "../src/demo.js";
 import { CONFIG, UMBRALES } from "../src/config.js";
 
 const $ = (id) => document.getElementById(id);
@@ -66,10 +70,8 @@ redimensionar();
 
 // ---- Estado de la simulación ----------------------------------------------------
 const ajustes = { velocidad: 20, pausa: true, voltaje: 6.0, alim: "externa", masaKg: 0.35, cortada: false, atasco: false, sonido: false, componentes: false };
-const estado = {
-  ag: null, cerebro: null, fuente: null, tS: 0, historiaAlerta: [], basura: [], acumSpawn: 0, ultimaConsulta: -1e9,
-  panzaKg: 0, cuenta: null, tPrimerAviso: null, tDesborde: null, reinicioEn: null, rng: null, nivelAnunciado: 0,
-};
+const demo = crearDemo();
+const estado = { rio: null, tS: 0, historiaAlerta: [], acumSpawn: 0, tPrimerAviso: null, tDesborde: null, reinicioEn: null, nivelAnunciado: 0 };
 let world, five, board, est;
 
 function log(msg, cls = "") {
@@ -96,128 +98,53 @@ function arrancarPlaca() {
   board.on("ready", () => {
     // ↓↓↓ exactamente lo que hace hardware/run.js en la maqueta real ↓↓↓
     est = crearEstacion(five, board, CONFIG, { log: (m) => log(m), reloj: () => world.time });
-    estado.ultimaConsulta = -1e9;
   });
 }
 
 function reiniciarTodo() {
-  estado.ag = crearAguacero();
-  estado.cerebro = crearCerebro(UMBRALES);
-  estado.fuente = crearFuenteDemo({ aguacero: estado.ag, cerebro: estado.cerebro, umbrales: UMBRALES });
-  for (const b of estado.basura) E.scene.remove(b.malla);
+  demo.reiniciar();
+  for (const b of estado.rio?.basura || []) E.scene.remove(b.malla);
   Object.assign(estado, {
-    tS: 0, historiaAlerta: [], basura: [], acumSpawn: 0, panzaKg: 0, tPrimerAviso: null, tDesborde: null, reinicioEn: null,
-    rng: mulberry32(semilla), nivelAnunciado: 0,
-    cuenta: { soltadas: 0, atrapadas: 0, porTipo: {}, escapadas: 0, descartadas: 0 },
+    rio: crearRio({ barreraZ: E.barreraZ, rng: mulberry32(semilla) }),
+    tS: 0, historiaAlerta: [], acumSpawn: 0, tPrimerAviso: null, tDesborde: null, reinicioEn: null, nivelAnunciado: 0,
   });
   $("consola").textContent = "";
   $("nuevo").hidden = true;
   log(`Semilla de la basura: ${semilla} (repetir con ?semilla=${semilla})`);
   arrancarPlaca();
-  document.querySelectorAll(".ojoBtn").forEach((b) => { b.setAttribute("aria-pressed", "false"); b.textContent = "Apagar"; });
+  document.querySelectorAll(".ojoBtn").forEach((b) => { b.setAttribute("aria-pressed", "false"); b.textContent = "Apagar"; b.classList.remove("on"); });
 }
 
-// ---- Basura flotante ------------------------------------------------------------
-const TIPOS = [
-  { nombre: "botella", p: 0.38, geo: new THREE.CylinderGeometry(0.06, 0.06, 0.42, 10).rotateZ(Math.PI / 2), mats: ["#a9dcef", "#7fc8a9", "#e9f3f7"], largo: 0.42, kg: 0.03 },
-  { nombre: "bolsa", p: 0.25, geo: new THREE.SphereGeometry(0.22, 10, 6).scale(1.3, 0.3, 1), mats: ["#f4f4f4", "#1d1d1d", "#2f6fd1"], largo: 0.5, kg: 0.01 },
-  { nombre: "icopor", p: 0.22, geo: new THREE.BoxGeometry(0.34, 0.1, 0.24), mats: ["#fbfbf6"], largo: 0.34, kg: 0.01 },
-  { nombre: "lata", p: 0.1, geo: new THREE.CylinderGeometry(0.045, 0.045, 0.16, 10).rotateX(Math.PI / 2), mats: ["#b8bcc2", "#c8252b"], largo: 0.2, kg: 0.015 },
-  { nombre: "chancla", p: 0.05, geo: new THREE.BoxGeometry(0.3, 0.04, 0.11), mats: ["#3aa655", "#e2a000"], largo: 0.3, kg: 0.12 },
-];
+// ---- Basura: la física está en sim/rio.js; aquí solo su aspecto -------------------
+const ASPECTO = {
+  botella: { geo: new THREE.CylinderGeometry(0.06, 0.06, 0.42, 10).rotateZ(Math.PI / 2), mats: ["#a9dcef", "#7fc8a9", "#e9f3f7"] },
+  bolsa: { geo: new THREE.SphereGeometry(0.22, 10, 6).scale(1.3, 0.3, 1), mats: ["#f4f4f4", "#1d1d1d", "#2f6fd1"] },
+  icopor: { geo: new THREE.BoxGeometry(0.34, 0.1, 0.24), mats: ["#fbfbf6"] },
+  lata: { geo: new THREE.CylinderGeometry(0.045, 0.045, 0.16, 10).rotateX(Math.PI / 2), mats: ["#b8bcc2", "#c8252b"] },
+  chancla: { geo: new THREE.BoxGeometry(0.3, 0.04, 0.11), mats: ["#3aa655", "#e2a000"] },
+};
 const matCache = new Map();
 const mat = (c) => matCache.get(c) || matCache.set(c, new THREE.MeshStandardMaterial({ color: c, roughness: 0.45 })).get(c);
 const llanta = new THREE.Mesh(new THREE.TorusGeometry(0.35, 0.14, 10, 24), new THREE.MeshStandardMaterial({ color: "#151515", roughness: 0.8 }));
 llanta.visible = false;
 E.scene.add(llanta);
-const MAX_BASURA = 320, CAPACIDAD_BOCA = 40;
 
 function soltarBasura(nivelM) {
-  const rnd = estado.rng;
-  let r = rnd(), t = TIPOS[0];
-  for (const x of TIPOS) { if ((r -= x.p) <= 0) { t = x; break; } }
-  const malla = new THREE.Mesh(t.geo, mat(t.mats[Math.floor(rnd() * t.mats.length)]));
-  const media = CANAL.mediaFondo + nivelM * (2.5 / 3.2) - 0.4;
-  const b = { malla, tipo: t, estado: "rio", x: -46, z: (rnd() * 2 - 1) * media, s: 0, fase: rnd() * 6, contada: false, pasa: false };
-  malla.rotation.y = rnd() * 6;
-  E.scene.add(malla);
-  estado.basura.push(b);
-  estado.cuenta.soltadas++;
-  if (estado.basura.length > MAX_BASURA) {
-    // Se retira primero lo que ya escapó aguas abajo; si no hay, lo más viejo (y se cuenta).
-    let i = estado.basura.findIndex((v) => v.contada);
-    if (i < 0) { i = 0; estado.cuenta.descartadas++; }
-    E.scene.remove(estado.basura[i].malla);
-    estado.basura.splice(i, 1);
-  }
+  const b = estado.rio.soltar(nivelM);
+  const a = ASPECTO[b.tipo.nombre];
+  b.malla = new THREE.Mesh(a.geo, mat(a.mats[b.color % a.mats.length]));
+  b.malla.rotation.y = b.giro;
+  E.scene.add(b.malla);
+}
+function quitarMallas() {
+  for (const b of estado.rio.tomarRemovidos()) if (b.malla) E.scene.remove(b.malla);
 }
 
-// Geometría de la rampa en el mundo (a partir del ángulo físico del servo).
-const V = new THREE.Vector3();
-function rampaMundo() {
+const rampaMundo = () => {
   const servo = world.servos[0];
-  const rampaDeg = (servo ? servo.grados : CONFIG.compuerta.abiertaDeg) - world.rampaOffsetDeg;
-  const th = -rampaDeg * DEG;
-  const bx = RAMPA.bisagraX, by = E.est.grupo.position.y + 0.55;
-  const puntaX = bx - RAMPA.largo * Math.cos(th) - 0.22 * Math.sin(th);
-  const puntaY = by - RAMPA.largo * Math.sin(th) + 0.22 * Math.cos(th);
-  return { rampaDeg, th, puntaX, puntaY, sumergida: puntaY < E.agua.y - 0.05 };
-}
-
-const S_HAZ = RAMPA.largo - 0.45, SEPARACION_BANDA = 0.55;
-function fisicaBasura(h, nivelM, velFlujo) {
-  const rm = rampaMundo();
-  const motor = world.motores[0];
-  const vBanda = motor ? (motor.rpm / 60) * Math.PI * 0.04 * Math.sqrt(5) : 0; // tambor de 4 cm, Froude 1:5
-  const andando = vBanda > 0.03 && !ajustes.atasco;
-  const media = CANAL.mediaFondo + nivelM * (2.5 / 3.2) - 0.3;
-  E.est.cabeza.updateWorldMatrix(true, false);
-  let enBanda = 0, hazTapado = ajustes.atasco, ultimaEntrada = Infinity, enBoca = 0;
-  for (const b of estado.basura) {
-    if (b.estado === "banda") ultimaEntrada = Math.min(ultimaEntrada, b.s);
-    if (b.estado === "boca") enBoca++;
-  }
-  const c = estado.cuenta;
-  let filaBoca = 0;
-  for (let i = estado.basura.length - 1; i >= 0; i--) {
-    const b = estado.basura[i];
-    if (b.estado === "rio") {
-      b.x += velFlujo * h * (1.05 + 0.1 * Math.sin(b.fase)); // lo que flota va un poco más rápido que el promedio
-      b.z += Math.sin(b.fase + estado.tS * 0.7) * 0.15 * h;
-      const bz = E.barreraZ(b.x);
-      if (bz !== null && Math.abs(b.z) > bz - 0.15) b.z = Math.sign(b.z) * (bz - 0.15); // la barrera la empuja al centro
-      b.z = Math.max(-media, Math.min(media, b.z));
-      if (!b.pasa && rm.sumergida && b.x >= rm.puntaX - 0.25 && b.x < RAMPA.bisagraX && Math.abs(b.z) < 1.25) {
-        if (andando && ultimaEntrada > SEPARACION_BANDA) { b.estado = "banda"; b.s = 0; ultimaEntrada = 0; }
-        else if (enBoca < CAPACIDAD_BOCA) { b.estado = "boca"; enBoca++; }
-        else b.pasa = true; // la boca está llena: rebosa y sigue con la corriente
-      }
-      if (!b.contada && b.x > RAMPA.bisagraX + 2) { b.contada = true; c.escapadas++; }
-      if (b.x > 120) { E.scene.remove(b.malla); estado.basura.splice(i, 1); continue; }
-      b.malla.position.set(b.x, E.agua.alturaEn(b.x, b.z) + 0.03, b.z);
-    } else if (b.estado === "boca") {
-      if (!rm.sumergida) { b.estado = "rio"; continue; } // la boca se levantó: pasa por debajo
-      if (andando && ultimaEntrada > SEPARACION_BANDA) { b.estado = "banda"; b.s = 0; ultimaEntrada = 0; continue; }
-      filaBoca++;
-      b.malla.position.set(rm.puntaX - 0.35 - (filaBoca % 7) * 0.18, E.agua.y + 0.04 + Math.floor(filaBoca / 7) * 0.06, Math.max(-1.1, Math.min(1.1, b.z)));
-    } else if (b.estado === "banda") {
-      if (andando) b.s += vBanda * h;
-      if (b.s >= RAMPA.largo - 0.05) {
-        estado.panzaKg += b.tipo.kg;
-        c.atrapadas++;
-        c.porTipo[b.tipo.nombre] = (c.porTipo[b.tipo.nombre] || 0) + 1;
-        E.scene.remove(b.malla); estado.basura.splice(i, 1); continue;
-      }
-      enBanda++;
-      if (Math.abs(b.s - S_HAZ) < b.tipo.largo / 2) hazTapado = true;
-      V.set(-RAMPA.largo + b.s, 0.3, Math.max(-1.1, Math.min(1.1, b.z * 0.8)));
-      b.malla.position.copy(V.applyMatrix4(E.est.cabeza.matrixWorld));
-    }
-  }
-  world.cargaBanda = Math.min(0.5, enBanda * 0.02) + (ajustes.atasco ? 1 : 0);
-  world.setDigital(IR, hazTapado ? 0 : 1); // receptor IR: BAJO = haz cortado
-  return { rm, vBanda, hazTapado };
-}
+  return rampaEnElMundo((servo ? servo.grados : CONFIG.compuerta.abiertaDeg) - world.rampaOffsetDeg, E.agua.y);
+};
+const S_HAZ = RAMPA.largo - 0.45;
 
 // ---- Sonido del rugido (Web Audio) ------------------------------------------------
 let audio = null;
@@ -253,7 +180,6 @@ $("empezar").onclick = () => {
   $("intro").hidden = true;
   activarSonido(true); // el clic del visitante permite el audio
   ajustes.pausa = false;
-  alternar("play", false, null, null);
   $("play").textContent = "Pausar";
 };
 $("play").onclick = () => {
@@ -293,8 +219,8 @@ UMBRALES.ojos.forEach((o, i) => {
 lista.addEventListener("click", (e) => {
   const b = e.target.closest(".ojoBtn");
   if (!b) return;
-  const id = +b.dataset.id, apagar = !estado.fuente.ojoApagado(id);
-  estado.fuente.apagarOjo(id, apagar);
+  const id = +b.dataset.id, apagar = !demo.fuente.ojoApagado(id);
+  demo.fuente.apagarOjo(id, apagar);
   b.setAttribute("aria-pressed", String(apagar));
   b.textContent = apagar ? "Encender" : "Apagar";
   b.classList.toggle("on", apagar);
@@ -302,7 +228,22 @@ lista.addEventListener("click", (e) => {
 });
 
 // ---- Gráfica de 60 min: nivel de cada ojo como % de SU nivel de peligro --------------------
+// La franja de alerta lleva color Y patrón (para quien no distingue rojo de verde):
+// VERDE liso · AMARILLO rayas diagonales · NARANJA puntos · ROJO cuadriculado · SIN DATOS rayas horizontales.
 const graf = $("grafica"), gg = graf.getContext("2d");
+function patronAlerta(nivel) {
+  const c = document.createElement("canvas");
+  c.width = c.height = 8;
+  const g = c.getContext("2d");
+  g.fillStyle = COLOR[nivel]; g.fillRect(0, 0, 8, 8);
+  g.strokeStyle = g.fillStyle = "rgba(0,0,0,.55)"; g.lineWidth = 1.5;
+  if (nivel === "AMARILLO") { g.beginPath(); g.moveTo(-2, 10); g.lineTo(10, -2); g.moveTo(-2, 2); g.lineTo(2, -2); g.moveTo(6, 10); g.lineTo(10, 6); g.stroke(); }
+  if (nivel === "NARANJA") { g.beginPath(); g.arc(4, 4, 1.6, 0, 7); g.fill(); }
+  if (nivel === "ROJO") { g.beginPath(); g.moveTo(0, 4); g.lineTo(8, 4); g.moveTo(4, 0); g.lineTo(4, 8); g.stroke(); }
+  if (nivel === "SIN_DATOS") { g.beginPath(); g.moveTo(0, 2); g.lineTo(8, 2); g.moveTo(0, 6); g.lineTo(8, 6); g.stroke(); }
+  return gg.createPattern(c, "repeat");
+}
+const PATRON = Object.fromEntries(["VERDE", "AMARILLO", "NARANJA", "ROJO", "SIN_DATOS"].map((n) => [n, patronAlerta(n)]));
 let GW = 0, GH = 0;
 new ResizeObserver(() => {
   const r = graf.getBoundingClientRect(), d = window.devicePixelRatio || 1;
@@ -312,8 +253,8 @@ new ResizeObserver(() => {
 }).observe(graf);
 function dibujarGrafica() {
   if (!GW) return;
-  const { ag, tS } = estado;
-  const W = GW, H = GH, izq = 30, der = 30, arriba = 14, banda = 10, abajo = 16 + banda, total = 3600, maxPct = 130;
+  const ag = demo.ag, tS = estado.tS;
+  const W = GW, H = GH, izq = 30, der = 30, arriba = 14, banda = 12, abajo = 18 + banda, total = 3600, maxPct = 130;
   const x = (t) => izq + (t / total) * (W - izq - der);
   const y = (pct) => H - abajo - (pct / maxPct) * (H - abajo - arriba);
   gg.clearRect(0, 0, W, H);
@@ -348,8 +289,8 @@ function dibujarGrafica() {
     gg.fillStyle = COLOR_OJO[i]; gg.textAlign = "center";
     gg.fillText(`${o.id}`, x(tp), y(Math.min(maxPct, pct(tp))) - 8);
   });
-  // franja de alerta y "ahora"
-  for (const h of estado.historiaAlerta) { gg.fillStyle = COLOR[h.sinDatos ? "SIN_DATOS" : h.nivel]; gg.fillRect(x(h.t), H - banda - 2, x(5) - x(0) + 1, banda); }
+  // franja de alerta (color + patrón) y "ahora"
+  for (const h of estado.historiaAlerta) { gg.fillStyle = PATRON[h.sinDatos ? "SIN_DATOS" : h.nivel]; gg.fillRect(x(h.t), H - banda - 2, x(5) - x(0) + 1, banda); }
   gg.strokeStyle = "#58c4ff"; gg.setLineDash([3, 3]); gg.lineWidth = 1.5;
   gg.beginPath(); gg.moveTo(x(tS), arriba - 8); gg.lineTo(x(tS), H - banda - 2); gg.stroke(); gg.setLineDash([]);
   gg.fillStyle = "#8e959f"; gg.textAlign = "center";
@@ -368,13 +309,13 @@ function simularCuadro(ahora) {
   const dtReal = Math.min(50, ahora - ultimo);
   ultimo = ahora;
   reloj += dtReal / 1000;
-  const { ag } = estado;
+  const ag = demo.ag, rio = estado.rio;
 
   // Al terminar los 60 min, otro aguacero solo (modo feria).
-  if (estado.tS >= ag.totalS && estado.reinicioEn === null) { estado.reinicioEn = reloj + 5; $("nuevo").hidden = false; }
+  if (estado.tS >= demo.totalS && estado.reinicioEn === null) { estado.reinicioEn = reloj + 5; $("nuevo").hidden = false; }
   if (estado.reinicioEn !== null && reloj >= estado.reinicioEn) reiniciarTodo();
   let restante = ajustes.pausa || estado.reinicioEn !== null ? 0 : dtReal * ajustes.velocidad;
-  let info = { rm: rampaMundo(), vBanda: 0, hazTapado: false };
+  let hazTapado = ajustes.atasco, vBanda = 0;
 
   while (restante > 0) {
     const h = Math.min(50, restante);
@@ -383,37 +324,46 @@ function simularCuadro(ahora) {
     const tS = estado.tS;
     const nivelM = ag.nivelCm(OJO_CAIMAN, tS) / 100;
     E.agua.setNivel(nivelM, nivelCanoM(nivelM));
-    E.est.grupo.position.y = E.agua.y - 0.12;
-    const velFlujo = velocidadFlujo(nivelM);
 
     // El "servidor": los ojos envían, el cerebro decide; la estación consulta cada 5 s.
-    if (tS - estado.ultimaConsulta >= 5) {
-      estado.ultimaConsulta = tS;
-      const a = estado.fuente.actualizar(tS);
+    const a = demo.tick(tS, est, { conectado: !ajustes.cortada });
+    if (a) {
       estado.historiaAlerta.push({ t: tS, nivel: a.nivel, sinDatos: a.sinDatos });
       if (estado.tPrimerAviso === null && NIVELES.indexOf(a.nivel) >= NIVELES.indexOf("NARANJA")) estado.tPrimerAviso = tS;
-      if (est && !ajustes.cortada && !a.sinDatos) est.setAlerta(a.nivel, a.motivo);
     }
     if (estado.tDesborde === null && ag.nivelCm(OJO_CAIMAN, tS) >= UMBRALES.ojos[OJO_CAIMAN - 1].cotaDesbordeCm) estado.tDesborde = tS;
     // Basura que baja con el agua
     estado.acumSpawn += (ag.basuraObjMin(tS) / 60) * (h / 1000);
     while (estado.acumSpawn >= 1) { estado.acumSpawn -= 1; soltarBasura(nivelM); }
-    info = fisicaBasura(h / 1000, nivelM, velFlujo);
+    const motor = world.motores[0];
+    vBanda = motor ? (motor.rpm / 60) * Math.PI * 0.04 * Math.sqrt(5) : 0; // tambor de 4 cm, Froude 1:5
+    const servo = world.servos[0];
+    const r = rio.paso(h / 1000, {
+      rampaDeg: (servo ? servo.grados : CONFIG.compuerta.abiertaDeg) - world.rampaOffsetDeg,
+      aguaY: E.agua.y, vBanda, andando: vBanda > 0.03 && !ajustes.atasco,
+      velFlujo: velocidadFlujo(nivelM), nivelM, t: tS, alturaEn: (x, z) => E.agua.alturaEn(x, z),
+    });
+    hazTapado = r.hazTapado || ajustes.atasco;
+    world.cargaBanda = r.cargaBanda + (ajustes.atasco ? 1 : 0);
+    world.setDigital(IR, hazTapado ? 0 : 1); // receptor IR: BAJO = haz cortado
     world.step(h);
     // El rugido dura 0,25–1,2 s de la maqueta; a ×20 se vería un parpadeo. En pantalla se
     // muestra (y se oye) al menos 1,2 s reales desde cada arranque del buzzer.
     const pin = world.pins.find((p) => p.pin === CONFIG.pines.rugido)?.value || 0;
     if (pin && !pinPrevio) rugidoVisualHasta = Math.max(rugidoVisualHasta, reloj + 1.2);
     pinPrevio = pin;
-    E.est.texBanda.offset.y -= (info.vBanda * h / 1000) / 0.8;
+    E.est.texBanda.offset.y -= (vBanda * h / 1000) / 0.8;
   }
+  quitarMallas();
+  for (const b of rio.basura) b.malla.position.set(b.px, b.py, b.pz);
 
   // ---- Hardware virtual -> 3D ----
   const rm = rampaMundo();
-  const apertura = Math.min(1, Math.max(0, (rm.rampaDeg + 25) / 60));
+  const rampaDeg = -rm.th / DEG;
+  const apertura = Math.min(1, Math.max(0, (rampaDeg + 25) / 60));
   E.est.cabeza.rotation.z = rm.th;
   const fi = 8 + 67 * apertura; // inclinación del cráneo: boca 33° atrapando, 40° abierta en alivio
-  E.est.craneoPiv.rotation.z = -(fi - rm.rampaDeg) * DEG;
+  E.est.craneoPiv.rotation.z = -(fi - rampaDeg) * DEG;
   E.est.grupo.position.y = E.agua.y - 0.12 + (quieto ? 0 : Math.sin(reloj * 0.8) * 0.02);
   E.est.grupo.rotation.x = quieto ? 0 : Math.sin(reloj * 0.6) * 0.008;
   E.barreras.position.y = E.agua.y + 0.05; // las boyas flotan
@@ -434,14 +384,14 @@ function simularCuadro(ahora) {
     m.material.opacity = rugiendo ? (1 - k) * 0.8 : 0;
   });
   if (rugiendo !== sonando) { rugidoAudio(rugiendo); sonando = rugiendo; }
-  E.est.hazMat.color.set(info.hazTapado ? "#ffffff" : "#ff2020");
-  E.est.hazMat.opacity = info.hazTapado ? 1 : 0.55;
-  E.est.relleno.scale.y = Math.max(0.01, Math.min(1, estado.panzaKg / 25));
+  E.est.hazMat.color.set(hazTapado ? "#ffffff" : "#ff2020");
+  E.est.hazMat.opacity = hazTapado ? 1 : 0.55;
+  E.est.relleno.scale.y = Math.max(0.01, Math.min(1, rio.panzaKg / 25));
   E.est.relleno.position.y = -0.5 + E.est.relleno.scale.y / 2;
   llanta.visible = ajustes.atasco;
   if (ajustes.atasco) {
-    E.est.cabeza.updateWorldMatrix(true, false);
-    llanta.position.copy(V.set(-RAMPA.largo + S_HAZ, 0.45, 0).applyMatrix4(E.est.cabeza.matrixWorld));
+    const p = rm.aMundo(-RAMPA.largo + S_HAZ, 0.45);
+    llanta.position.set(p.x, p.y, 0);
     llanta.rotation.set(Math.PI / 2, 0, rm.th);
   }
 
@@ -458,11 +408,10 @@ function simularCuadro(ahora) {
 }
 
 function actualizarHud(rm) {
-  const { ag, tS, cuenta } = estado;
-  const mmss = (s) => String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(Math.floor(s % 60)).padStart(2, "0");
+  const ag = demo.ag, { tS } = estado, cuenta = estado.rio.cuenta;
   $("reloj").textContent = mmss(tS);
   $("fase").textContent = tS < ag.duracionS ? "Lluvia" : "Bajada";
-  const a = estado.fuente.ultima();
+  const a = demo.ultima();
   const st = est?.status();
   // Banner: lo que sabe la estación, no solo lo que dice el cerebro.
   const sinDatos = ajustes.cortada || a.sinDatos || st?.modo === "SIN_DATOS" || st?.modo === "ALIVIO_SIN_DATOS";
@@ -493,7 +442,7 @@ function actualizarHud(rm) {
   $("tReal").textContent = cuenta.atrapadas;
   const error = cuenta.atrapadas ? Math.round(((st?.objetos ?? 0) - cuenta.atrapadas) / cuenta.atrapadas * 100) : 0;
   $("tError").textContent = cuenta.atrapadas ? `${error > 0 ? "+" : ""}${error} %` : "–";
-  $("tKgReal").textContent = `${num(estado.panzaKg)} kg`;
+  $("tKgReal").textContent = `${num(estado.rio.panzaKg)} kg`;
   $("tEsc").textContent = cuenta.escapadas + (cuenta.descartadas ? ` (+${cuenta.descartadas} fuera de vista)` : "");
   const aviso = estado.tPrimerAviso !== null && estado.tDesborde !== null ? `${num((estado.tDesborde - estado.tPrimerAviso) / 60, 0)} min`
     : estado.tPrimerAviso !== null ? "contando…" : "–";
@@ -502,7 +451,7 @@ function actualizarHud(rm) {
   $("tAmp").textContent = `${num(amps, 2)} A`;
   $("ampBarra").style.width = `${Math.min(100, (amps / 3) * 100)}%`;
   $("ampBarra").style.background = amps > 0.45 && ajustes.alim === "arduino5v" ? "var(--rojo)" : servo?.bloqueado ? "var(--amarillo)" : "var(--accent)";
-  const tipos = TIPOS.map((t) => cuenta.porTipo[t.nombre] ? `${cuenta.porTipo[t.nombre]} ${cuenta.porTipo[t.nombre] === 1 ? t.nombre : PLURAL[t.nombre]}` : null).filter(Boolean);
+  const tipos = Object.keys(ASPECTO).map((n) => cuenta.porTipo[n] ? `${cuenta.porTipo[n]} ${cuenta.porTipo[n] === 1 ? n : PLURAL[n]}` : null).filter(Boolean);
   $("clasificacion").textContent = tipos.length ? tipos.join(" · ") : "todavía nada";
   (a.porOjo || []).forEach((o, i) => {
     const id = i + 1, cm = ag.nivelCm(id, tS);
@@ -523,8 +472,10 @@ requestAnimationFrame(cuadro);
 // Gancho para pruebas y demostraciones: avanzar sin esperar al navegador y sacar una foto.
 // avanzar(ms) avanza ms de tiempo REAL (a la velocidad elegida: a ×20, 1000 ms = 20 s simulados).
 window.__caiman = {
-  get world() { return world; }, get est() { return est; }, get tS() { return estado.tS; }, E, ajustes, estado,
-  get escapadas() { return estado.cuenta.escapadas; },
+  get world() { return world; }, get est() { return est; }, get tS() { return estado.tS; }, E, ajustes, estado, demo,
+  get escapadas() { return estado.rio.cuenta.escapadas; },
+  /** Llamadas de dibujo y triángulos del último cuadro (renderer.info). */
+  get info() { return { ...renderer.info.render }; },
   empezar() { $("empezar").click(); },
   avanzar(ms) { for (let t = 0; t < ms; t += 50) simularCuadro(ultimo + 50); },
   foto(ancho = 640) {
